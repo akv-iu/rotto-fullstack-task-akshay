@@ -1,6 +1,6 @@
 # Specification: Functional and Non-Functional Requirements
 
-**Status:** DRAFT, awaiting sign-off. No implementation starts until this is approved.
+**Status:** APPROVED 2026-10-07. Any change from here on goes through this document first, and is logged in [NOTES.md](NOTES.md).
 Hard constraints from the brief live in [TECH_REQUIREMENTS.md](TECH_REQUIREMENTS.md) and are referenced by their IDs (T*, S*, R*, X*, B*, P*, D*).
 
 ---
@@ -24,11 +24,11 @@ Hard constraints from the brief live in [TECH_REQUIREMENTS.md](TECH_REQUIREMENTS
 ### FR-2 Natural-language search
 - FR-2.1 The recruiter enters a free-text brief (max length to be set, see OQ-7).
 - FR-2.2 The server sends **only the brief** to the LLM, which returns filters that must fit a fixed, typed filter schema (see §4).
-- FR-2.3 The server validates the LLM output against the schema. Unknown fields, bad types and values the data cannot support are dropped (see §4.2).
+- FR-2.3 The server validates the LLM output against the schema. Unknown keys and values move to `unsupported`; they are never dropped silently (see §4.2).
 - FR-2.4 Postgres runs a parameterized query built from the validated filters and returns matches **ranked best first**.
 - FR-2.5 The response follows the contract `{ search_id, filters, total, results[20], searches_remaining }`.
-- FR-2.6 If no usable filter is left (vague, unsupported or hostile brief), the search returns **0 results**, never the whole table. The UI explains why and suggests how to rephrase.
-- FR-2.7 A search stores its **validated filters** (not its results) in `searches`. Paging re-runs the same query with a deterministic order: `ORDER BY score DESC, id ASC`. The candidate data is static, so the order is stable.
+- FR-2.6 If no usable filter is left (vague or hostile brief), **or any condition is unsupported** (e.g. "speaks Japanese"), the search returns **0 results**, never the whole table or a broadened set. The UI explains why and suggests how to rephrase.
+- FR-2.7 A search stores its **validated filters** (not its results) in `searches`. Paging re-runs the same query with a deterministic order: `ORDER BY open_to_work DESC, years_experience DESC, id ASC` (§4.0). The candidate data is static, so the order is stable.
 - FR-2.8 `POST /api/search` also accepts optional fields: `{ brief, filters?, parent_search_id?, saved_brief_id? }`. Exactly one mode applies, and any other combination gets **400**:
   - Only `brief` (the contract and grader path): the LLM extracts the filters.
   - `filters` plus `parent_search_id` (a correction, FR-4): the LLM is skipped and the parent's brief is used.
@@ -120,13 +120,13 @@ Every data view has explicit **loading** (skeletons), **empty** (with a next act
 ### NFR-PERF Performance
 - PERF-1 Paging p95 is **< 300 ms**: load the stored filters by `search_id`, then re-run the indexed candidate query (5k rows, about 10 ms) with `LIMIT/OFFSET`.
 - PERF-2 A new search is **< 3 s** end to end. We use a fast, small model with a short prompt and structured output, the candidate query takes < 200 ms, and indexes are built for the filter fields (GIN on skills / companies arrays, trigram or normalized columns for text).
-- PERF-3 The model call has a timeout of about 2.5 s. On timeout, the search fails cleanly and the quota is refunded.
+- PERF-3 Model timeout is **6 s**, with no retry. In testing, p95 was 1.86 s but the worst call was 3.8 s. Failing a slow call outright would cost accuracy points, while a rare slow success costs at most a little of the speed score. On timeout, the search fails cleanly and the quota is refunded.
 
 ### NFR-ACC Search accuracy
-- ACC-1 Precision matters as much as recall. Filters are **AND-ed** across dimensions and OR-ed within one dimension only where the brief says so.
-- ACC-2 Ranking puts the strongest matches on page 1 (e.g. how many soft criteria match, how relevant the title/headline is, years of experience). The scoring formula is decided after we profile the data.
+- ACC-1 Precision matters as much as recall. Filters are exact matches, **AND-ed** across fields. Skills are AND-ed within the field; other fields are OR-ed within the field only where the brief says so (§4.1).
+- ACC-2 The ground truth is an exact filter (§4.0), so page-1 precision follows from the precision of the filter. The ordering is a simple, deterministic UX choice: open to work first, then most experienced.
 - ACC-3 Accuracy is measured against `queries.json` with a local eval script (precision, recall, page-1 precision). It must not regress before submission.
-- ACC-4 Brief terms the data cannot support produce an "unsupported" note shown to the user, **not** an invented filter.
+- ACC-4 A condition the data cannot support becomes an "unsupported" chip and **empties the result**. It is never invented and never silently dropped. Removing the chip re-runs the search without it.
 
 ### NFR-UX Product and design
 - UX-1 Minimal, beautiful, and usable without instructions. Every element earns its place.
@@ -144,47 +144,92 @@ Every data view has explicit **loading** (skeletons), **empty** (with a next act
 ### NFR-DOC Documentation
 - DOC-1 A one-page README (D2) and a Loom of 5 minutes or less (D3).
 
-## 4. Search design (provisional, finalised after inspecting `candidates.json`)
+## 4. Search design (based on `candidates.json` and `queries.json`, 2026-10-07)
 
-### 4.1 Filter schema (draft)
+### 4.0 What the data tells us
+- **Every field has a small, fixed set of values.** 13 roles · 4 seniorities · 10 US cities (one country) · 79 skills · 28 companies (16 startups, 12 enterprises; each company always has the same type) · 5 degrees · 14 fields of study · 13 schools · `open_to_work` boolean · years 0–15 · exactly 1 education entry · 1–4 jobs in the work history.
+- **The data is internally consistent:** `current_title` = seniority prefix + `role`; `headline` starts with the title; the job with `end_year = null` is always at `current_company`.
+- **Seniority maps exactly to years of experience:** junior 0–2, mid 3–5, senior 6–9, staff 10–15. Seniorities "lead" and "principal" don't exist in the data.
+- **The ground truth is an exact boolean filter.** Every non-empty sample query (9 of 9) reproduces **exactly** (0 false positives, 0 false negatives) as an AND of exact-match conditions:
+
+| Brief | Matching rule (verified) |
+|---|---|
+| senior React engineers in New York who have worked at a startup | `seniority=senior` ∧ `'React' ∈ skills` ∧ `city=New York` ∧ **any** job at a startup. *Not* `role = Frontend` (that gives 6 of 21); *not* current job only (19 of 21) |
+| product designers in SF who are open to work | `role` ∧ `city` ∧ `open_to_work` |
+| data scientists with a PhD | `role` ∧ `degree=PhD` |
+| backend engineers in Austin who know Go and Kubernetes | `role` ∧ `city` ∧ both skills (**AND** within skills) |
+| staff full stack engineers in Seattle | `seniority` ∧ `role` ∧ `city` |
+| ML engineers who studied at Stanford | `role` ∧ `school` |
+| account executives in Chicago with enterprise sales experience | `role` ∧ `city` ∧ the **skill** `Enterprise Sales` (*not* "has worked at an enterprise company", which gives 15 of 22) |
+| junior frontend engineers in Boston who are open to work | `seniority` ∧ `role` ∧ `city` ∧ `open_to_work` |
+| mobile engineers who know Swift | `role` ∧ skill |
+| product managers who speak Japanese | **expected empty.** Languages aren't in the data, so the whole search returns nothing (it does **not** drop the condition and return all 411 PMs) |
+
+**What this means for the design:**
+1. **Filtering is an exact match, AND-ed across conditions.** No fuzzy, partial or "soft" matching, which would only add false positives.
+2. **If any condition in the brief can't be met from the data, the result is empty.** It is shown as an "unsupported" chip. Removing that chip re-runs the search without it (a free correction). This gives the right score *and* good UX.
+3. **Ranking barely affects the score.** If the filter is exact, every result is correct, so page-1 precision equals overall precision. We use a simple, deterministic order: `open_to_work DESC, years_experience DESC, id ASC`. All the effort goes into **getting the filters right**.
+4. **A skill named before a role word is a skill, not a role:** "React engineers" means skill = React, with no role filter. A role filter applies only when the brief names one of the 13 roles (or a clear alias of one).
+
+### 4.1 Filter schema (final shape; every value is checked against a fixed list)
 ```ts
 {
-  titles?: string[]          // role keywords: "frontend engineer", "data scientist"
-  seniority?: "junior"|"mid"|"senior"|"staff"|"principal"|"lead"
-  skills?: string[]          // must match the known skills vocabulary
-  locations?: string[]       // must match known locations (city/state/country)
-  min_years?: number; max_years?: number
-  companies?: string[]       // worked at (known company names)
-  company_traits?: ("startup"|...)[]  // only if the data can support it
-  schools?: string[]; degrees?: string[]
-  unsupported?: string[]     // parts of the brief we can't filter on (shown, not applied)
+  roles?:        Role[]            // the 13 role values; OR within (e.g. "frontend or full stack")
+  seniorities?:  Seniority[]       // junior|mid|senior|staff; OR within ("senior or staff")
+  skills?:       Skill[]           // the 79 skills; **AND** within ("knows Go and Kubernetes")
+  cities?:       City[]            // the 10 cities; OR within. A state maps to its cities (California → SF + LA)
+  min_years?:    0..15;  max_years?: 0..15
+  open_to_work?: true
+  worked_at_company_type?: "startup" | "enterprise"     // any job in the history
+  current_company_type?:   "startup" | "enterprise"     // only the current job ("currently at a startup")
+  companies?:    Company[]         // 28 values; any job in the history; OR within
+  current_company?: Company[]      // only the current job
+  degrees?:      Degree[]          // BS|BA|MS|MBA|PhD; OR within
+  fields?:       Field[]           // the 14 fields of study; OR within
+  schools?:      School[]          // the 13 schools; OR within
+  unsupported?:  string[]          // conditions the data can't answer → force an empty result
 }
 ```
+The lists are **generated from the data at seed time** and used for the zod schema, for the model's structured-output schema (as enums) and for the UI chip editors. Nothing is hard-coded twice.
 
 ### 4.2 Stopping invented filters
-- The vocabularies (skills, locations, companies, schools, degrees) are extracted from the data at seed time.
-- The LLM receives the field list and enum-like guidance. Its output is **normalised and matched against the vocabularies** in Postgres. Values with no match move to `unsupported` instead of being applied.
-- Synonyms and aliases (e.g. `NYC` → `New York`, `JS` → `JavaScript`) are handled by the prompt plus a small alias table.
+- The model has to choose from **enums in its structured output**, so it can't return a value that isn't in the data. Values it can't map go into `unsupported`.
+- The server checks everything again (zod with the same enums). An unknown key or value moves to `unsupported`; it is never dropped silently.
+- `unsupported` is not empty → `total = 0`, and the chips explain why. No usable filters at all → `total = 0` (SEC-6a).
+- Subjective words with no data behind them ("great", "talented", "rockstar") are **ignored** rather than treated as unsupported. Concrete conditions we can't check (language, visa, salary, remote, a city or company not in the data, "lead"/"principal") **are** unsupported. The prompt gives examples of both kinds, and we tune this with our own extra test briefs.
+- Aliases are handled in the prompt: NYC/Manhattan → New York, SF/Bay Area → San Francisco, ML → Machine Learning Engineer, "full-stack" → Full Stack Engineer, "Postgres/PostgreSQL" → Postgres, "Stanford" → Stanford University, "masters" → MS, "PhD/doctorate" → PhD, "5+ years" → `min_years: 5`.
 
-## 5. Open questions (need your decision)
+### 4.3 Query
+One parameterized SQL function, `search_candidates(filters jsonb, limit, offset)`, used by search, paging, corrections and re-runs. Candidates are stored as columns (role, seniority, city, years, open_to_work) plus arrays (`skills text[]`, `companies text[]`, `company_types text[]`, `degrees`, `fields`, `schools`) and the current company and its type. Array conditions use `@>` (contains all) and `&&` (overlaps), with GIN indexes. That's 5k rows, so the query takes a few ms.
 
-| # | Question | Proposed default |
+### 4.4 Billing findings (`stripe-events.json`)
+- Five deliveries, and all five signatures check out against the **full** secret string (`whsec_…` included) using `HMAC-SHA256(secret, t + "." + payload)`. Each payload must be HMAC'd **byte for byte as received**, never re-serialised from parsed JSON.
+- The repeat has the **same event id but a different signature `t`**, so de-duplication must use `event.id`, never the signature.
+- The out-of-order pair is `globex_2` (updated, `active`, created …320), which arrives before `globex_1` (created, `incomplete`, created …260). Ordering must use **`event.created`**, not arrival order or the signature `t`. Per subscription, an event is applied only if its `created` is later than the last applied one.
+- Event types seen: `customer.subscription.created`, `.updated` and `.deleted`. Statuses seen: `active`, `incomplete`, `canceled`.
+- The file's expected end state is **acme = free** (subscribed, then cancelled) and **globex = paid**. This becomes a test.
+
+## 5. Decisions (formerly open questions)
+
+| # | Question | Decision |
 |---|---|---|
 | OQ-1 | Do filter edits and saved-search re-runs count as a new search against the free quota? | **Corrections are free; saved-search re-runs count.** A correction must reference a `parent_search_id` the company owns, so it refines a search that has already been paid for. Without this, a free user would hit a 402 the moment they tried to fix a chip, which fails the "correct them easily" UI check. The cost is bounded at **10 corrections per paid-for search** (FR-4.5). The README states this tradeoff: a free user can run up to 10 refined queries off their one search |
 | OQ-2 | Refund the quota when a search fails (LLM timeout / 5xx)? | **Yes.** A search that returns 0 results still counts |
-| OQ-3 | Which Stripe statuses count as "active"? | `active` and `trialing` count as paid. `past_due`, `unpaid`, `canceled`, `incomplete*` and `paused` count as free |
-| OQ-4 | Signature timestamp tolerance? | **No tolerance check** (events are replayed). Signatures are checked with HMAC-SHA256 using `node:crypto` (FR-9.1). The README states the tradeoff: replay protection comes from event-id dedup and ordering, not from the timestamp || OQ-5 | After a subscription ends, does the free search come back? | **No.** It is 1 search in total, for ever |
+| OQ-3 | Which Stripe statuses count as "active"? | `active` and `trialing` count as paid; everything else counts as free. The sample uses `active`, `incomplete` (→ free) and `canceled` (§4.4). A `.deleted` event always means free |
+| OQ-4 | Signature timestamp tolerance? | **No tolerance check** (events are replayed). Signatures are checked with HMAC-SHA256 using `node:crypto` (FR-9.1). The README states the tradeoff: replay protection comes from event-id dedup and ordering, not from the timestamp |
+| OQ-5 | After a subscription ends, does the free search come back? | **No.** It is 1 search in total, for ever |
 | OQ-6 | Duplicate shortlist names within one company? | Reject with 409 |
 | OQ-7 | Maximum brief length? | 500 characters |
 | OQ-8 | Quota reserve/refund: Postgres `SECURITY DEFINER` RPC, or service-role client in the API? | **RPC** (`reserve_search()` / `refund_search()`). It uses the caller's company from `current_company_id()`, so no secret key is needed on the search path |
-| OQ-9 | LLM provider and model? | A fast, cheap model with structured output (e.g. Claude Haiku 4.5, or a GPT-mini / Gemini Flash tier). We decide after a latency and accuracy check against `queries.json` |
+| OQ-9 | LLM provider and model? | **Decided (2026-10-07): OpenAI `gpt-4.1-mini-2025-04-14`** (`OPENAI_API_KEY`), pinned snapshot, Chat Completions with **strict `json_schema`** (enums generated from the data), `temperature: 0`. Test over 50 calls: **50/50 exact**, 0 errors, p50 1.26 s, p95 1.86 s, max 3.8 s. All 6 hostile/unanswerable briefs → empty. Cost ≈ **$0.0004–0.0007 per search** (about 1,390 tokens in, of which 1,152 are served from OpenAI's prompt cache, and about 90 out). Rejected: Gemini 3.8 Flash (free tier 6–21 s plus 503s), Gemini Flash-Lite (3–5 of 10 exact), `gpt-5.4-mini` and `gpt-5-mini` (45/50: they add a "Frontend" role to "React engineers") |
 | OQ-10 | UI library? | Tailwind + shadcn/ui (Radix) for accessible primitives. No heavy component kit |
 
 ## 6. Inputs needed before implementation
-- `candidates.json`, `stripe-events.json` and `queries.json` placed in `data/` (to inspect the schema, the event types and the eval set).
-- Node 24, `make` and an LLM key available locally.
+- ~~The data files~~: done and committed (§4.0, §4.4).
+- An LLM key is set locally (`OPENAI_API_KEY`).
+- Still to do on this machine before building: install Node 24 and `make`.
 
 ## 7. Sign-off
-- [ ] Functional requirements approved
-- [ ] Non-functional requirements approved
-- [ ] Open questions resolved
+- [x] Functional requirements approved (2026-10-07)
+- [x] Non-functional requirements approved (2026-10-07)
+- [x] Open questions resolved (2026-10-07)
