@@ -1,0 +1,45 @@
+{
+  "note": "Send each entry's payload, byte for byte, as the request body with its Stripe-Signature header. These were signed when the file was made, and Stripe's libraries reject signatures older than a few minutes by default, so to replay them either pass a larger tolerance or re-sign each payload with the secret yourself.",
+  "events": [
+    {
+      "description": "acme subscribes",
+      "headers": {
+        "Stripe-Signature": "t=1791211200,v1=2cfbf38f471a22c574d76f649acd6ceb185cb4f34a07daeffca331043b71cf85"
+      },
+      "payload": "{\"id\":\"evt_sample_acme_1\",\"object\":\"event\",\"api_version\":\"2025-09-30\",\"created\":1791211200,\"livemode\":false,\"type\":\"customer.subscription.created\",\"data\":{\"object\":{\"id\":\"sub_sample_acme\",\"object\":\"subscription\",\"customer\":\"cus_acme\",\"status\":\"active\",\"metadata\":{\"company\":\"acme\"},\"current_period_end\":1793803200}}}"
+    },
+    {
+      "description": "the same event delivered again",
+      "headers": {
+        "Stripe-Signature": "t=1791211205,v1=bc9209d1a97454edf241eefb34bb52e75645d90b462a891d5cdebf4b36816d6e"
+      },
+      "payload": "{\"id\":\"evt_sample_acme_1\",\"object\":\"event\",\"api_version\":\"2025-09-30\",\"created\":1791211200,\"livemode\":false,\"type\":\"customer.subscription.created\",\"data\":{\"object\":{\"id\":\"sub_sample_acme\",\"object\":\"subscription\",\"customer\":\"cus_acme\",\"status\":\"active\",\"metadata\":{\"company\":\"acme\"},\"current_period_end\":1793803200}}}"
+    },
+    {
+      "description": "globex's newer event arrives first",
+      "headers": {
+        "Stripe-Signature": "t=1791211330,v1=4654f330a291ca014eedbf6646d22da1bb9d735ea1d53a57d9fcf50baaf62365"
+      },
+      "payload": "{\"id\":\"evt_sample_globex_2\",\"object\":\"event\",\"api_version\":\"2025-09-30\",\"created\":1791211320,\"livemode\":false,\"type\":\"customer.subscription.updated\",\"data\":{\"object\":{\"id\":\"sub_sample_globex\",\"object\":\"subscription\",\"customer\":\"cus_globex\",\"status\":\"active\",\"metadata\":{\"company\":\"globex\"},\"current_period_end\":1793803320}}}"
+    },
+    {
+      "description": "globex's older event arrives late",
+      "headers": {
+        "Stripe-Signature": "t=1791211335,v1=569a4874486c379483e2f517b140a3bf5c6788907cbf828927bf6dac275c813f"
+      },
+      "payload": "{\"id\":\"evt_sample_globex_1\",\"object\":\"event\",\"api_version\":\"2025-09-30\",\"created\":1791211260,\"livemode\":false,\"type\":\"customer.subscription.created\",\"data\":{\"object\":{\"id\":\"sub_sample_globex\",\"object\":\"subscription\",\"customer\":\"cus_globex\",\"status\":\"incomplete\",\"metadata\":{\"company\":\"globex\"},\"current_period_end\":1793803260}}}"
+    },
+    {
+      "description": "acme cancels",
+      "headers": {
+        "Stripe-Signature": "t=1791211380,v1=35118215e68655567a6540c7367d372ac7dbab4bd09ef36e936e3637a14261c4"
+      },
+      "payload": "{\"id\":\"evt_sample_acme_2\",\"object\":\"event\",\"api_version\":\"2025-09-30\",\"created\":1791211380,\"livemode\":false,\"type\":\"customer.subscription.deleted\",\"data\":{\"object\":{\"id\":\"sub_sample_acme\",\"object\":\"subscription\",\"customer\":\"cus_acme\",\"status\":\"canceled\",\"metadata\":{\"company\":\"acme\"},\"current_period_end\":1793803380}}}"
+    }
+  ],
+  "expected_plans_after": {
+    "acme": "free",
+    "globex": "paid"
+  }
+}
+
