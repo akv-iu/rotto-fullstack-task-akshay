@@ -7,6 +7,7 @@ A small recruiter app. A recruiter describes the candidates they want in plain E
 > - [docs/SPEC.md](docs/SPEC.md): functional and non-functional requirements (approved)
 > - [docs/SCORING.md](docs/SCORING.md): the grading rubric mapped to requirements and to our own checks, used to catch drift
 > - [docs/NOTES.md](docs/NOTES.md): decision log and exploration findings
+> - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): layers, data model, request flows, setup and tests
 > - [docs/DESIGN.md](docs/DESIGN.md): UI/UX decisions, research, and screenshots of the agreed design
 
 ## Tech stack
