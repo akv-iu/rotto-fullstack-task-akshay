@@ -1,0 +1,138 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;padding:36px 40px;background:#ffffff;color:#1c1c1a;font-family:"Instrument Sans",system-ui,sans-serif}
+h2{font-size:24px;font-weight:600;letter-spacing:-.01em;margin:0 0 6px}
+h3{font-size:16px;font-weight:600;margin:0 0 6px}
+.subtitle{color:#6f6f6a;font-size:14px;max-width:110ch;margin:0 0 18px;line-height:1.5}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:20px}
+.card{border:1px solid #e7e7e4;border-radius:14px;overflow:hidden;background:#fff}
+.card-image{padding:14px;background:#f4f4f2}
+.card-body{padding:14px 16px}.card-body p{color:#55554f;font-size:13px;line-height:1.5;margin:0}
+</style></head><body><style>
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap');
+.m{font-family:"Instrument Sans",system-ui,sans-serif;color:#1c1c1a;background:#f6f6f5;border:1px solid #e7e7e4;border-radius:12px;overflow:hidden;font-size:12.5px;line-height:1.45}
+.m *{box-sizing:border-box}
+.top{display:flex;align-items:center;gap:18px;padding:11px 18px;border-bottom:1px solid #e7e7e4;background:#fff}
+.logo{font-weight:600;letter-spacing:-.01em;font-size:14px}
+.nav{display:flex;gap:16px;color:#6f6f6a}.nav b{color:#1c1c1a;font-weight:500}
+.plan{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:11.5px;color:#55554f}
+.plan .up{border:1px solid #c2410c;color:#c2410c;border-radius:6px;padding:3px 9px;font-weight:500}
+.brief{border:1px solid #d6d6d2;border-radius:10px;background:#fff;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.go{background:#c2410c;color:#fff;border-radius:7px;padding:4px 11px;font-size:11.5px;font-weight:500;white-space:nowrap}
+.chips{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.chip{border:1px solid #d6d6d2;border-radius:999px;padding:3px 9px;background:#fff;font-size:11.5px;white-space:nowrap;display:inline-flex;gap:5px;align-items:center}
+.chip .k{color:#6f6f6a}.chip .x{color:#a3a39d}
+.chip.open{border-color:#c2410c;box-shadow:0 0 0 3px rgb(194 65 12 / .14)}
+.chip.add{border-style:dashed;color:#55554f}
+.clear{color:#6f6f6a;font-size:11.5px;text-decoration:underline;text-underline-offset:2px}
+.pop{position:absolute;top:30px;left:0;width:200px;background:#fff;border:1px solid #e7e7e4;border-radius:10px;box-shadow:0 12px 32px rgb(24 24 27 / .10);padding:6px;z-index:2}
+.pop .o{padding:5px 8px;border-radius:6px;display:flex;justify-content:space-between}
+.pop .o.sel{background:#fdf0e9;color:#c2410c;font-weight:500}
+.pop input{width:100%;border:1px solid #e7e7e4;border-radius:6px;padding:4px 7px;font:inherit;font-size:11.5px;margin-bottom:4px}
+.meta{display:flex;justify-content:space-between;align-items:center;color:#6f6f6a;font-size:11.5px}
+.save{color:#1c1c1a;font-weight:500;border:1px solid #d6d6d2;border-radius:6px;padding:3px 9px;background:#fff}
+.row{display:flex;gap:11px;align-items:center;padding:10px 14px;border-top:1px solid #efefed;background:#fff}
+.row.sel{background:#fef7f3;box-shadow:inset 2px 0 0 #c2410c}
+.row img{width:34px;height:34px;border-radius:999px;background:#f1f1ef;flex:none}
+.row .t{flex:1;min-width:0}.row .n{font-weight:500}
+.row .s{color:#6f6f6a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .sk{margin-top:3px;display:flex;gap:4px;flex-wrap:wrap}
+.tag{background:#f1f1ef;border-radius:4px;padding:0 6px;font-size:11px;color:#55554f}
+.tag.hit{background:#fdf0e9;color:#c2410c;font-weight:500}
+.sl{border:1px solid #d6d6d2;border-radius:7px;padding:3px 9px;font-size:11.5px;color:#3f3f3b;background:#fff;white-space:nowrap}
+.sl.on{border-color:#f5c6ad;background:#fdf0e9;color:#c2410c}
+.prof{background:#fff;border-left:1px solid #e7e7e4;padding:18px}
+.prof .av{width:52px;height:52px;border-radius:999px}
+.prof h4{margin:10px 0 2px;font-size:16px;font-weight:600;letter-spacing:-.01em}
+.sub{color:#6f6f6a}
+.h{margin:16px 0 6px;font-size:11.5px;color:#6f6f6a;font-weight:500}
+.exp{display:flex;gap:10px;align-items:flex-start;margin:7px 0}.exp img{width:22px;height:22px;border-radius:5px;flex:none;margin-top:1px}
+.pbtn{display:flex;gap:8px;margin-top:4px}
+.primary{background:#c2410c;color:#fff;border-radius:7px;padding:5px 12px;font-size:12px;font-weight:500}
+.ghost{border:1px solid #d6d6d2;border-radius:7px;padding:5px 12px;font-size:12px}
+.phone{width:290px;border:1px solid #d6d6d2;border-radius:28px;padding:8px;background:#fff;box-shadow:0 10px 30px rgb(24 24 27 / .08)}
+.phone .m{border-radius:20px;height:560px;display:flex;flex-direction:column;position:relative}
+.note{font-size:13px;color:#55554f;margin:6px 0 0}
+.note b{color:#1c1c1a}
+</style>
+
+<h2>Final design: layout and look</h2>
+<p class="subtitle">One calm list by default. Opening a candidate docks their profile beside the list on desktop (the Juicebox / Gem pattern) and becomes a full sheet on a phone. Chips sit in one row above results, Shortlist is on every row, Save search sits with the chips, and the skills that matched are highlighted.</p>
+
+<h3 style="margin-top:22px">Desktop: a candidate is open, the "City" chip is being edited</h3>
+<div class="m" style="height:560px;display:flex;flex-direction:column">
+  <div class="top"><span class="logo">Rotto</span><div class="nav"><b>Search</b><span>Shortlists</span><span>Saved searches</span></div><div class="plan"><span>Free plan · 0 searches left</span><span class="up">Upgrade</span></div></div>
+  <div style="display:flex;flex:1;min-height:0">
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+      <div style="padding:16px 18px 10px;display:flex;flex-direction:column;gap:10px">
+        <div class="brief"><span>senior React engineers in New York who have worked at a startup</span><span class="go">Search</span></div>
+        <div class="chips" style="position:relative">
+          <span class="chip"><span class="k">Seniority</span> Senior <span class="x">×</span></span>
+          <span class="chip"><span class="k">Skill</span> React <span class="x">×</span></span>
+          <span style="position:relative"><span class="chip open"><span class="k">City</span> New York <span class="x">×</span></span>
+            <div class="pop"><input value="" placeholder="Search cities"><div class="o sel">New York <span>✓</span></div><div class="o">San Francisco</div><div class="o">Boston</div><div class="o">Austin</div><div class="o" style="color:#6f6f6a">6 more</div></div>
+          </span>
+          <span class="chip"><span class="k">Worked at</span> a startup <span class="x">×</span></span>
+          <span class="chip add">+ Filter</span>
+          <span class="clear">Clear filters</span>
+        </div>
+        <div class="meta"><span>21 people match all filters</span><span class="save">Save search</span></div>
+      </div>
+      <div style="overflow:hidden">
+        <div class="row"><img src="https://rotto.com/rotto/full-stack-assessment/avatars/avatar-072.svg"><div class="t"><div class="n">Elena Costa</div><div class="s">Senior Full Stack Engineer at Fernway · New York · 9 yrs</div><div class="sk"><span class="tag hit">React</span><span class="tag">AWS</span><span class="tag">Postgres</span><span class="tag">Python</span></div></div><span class="sl on">✓ Shortlisted</span></div>
+        <div class="row sel"><img src="https://rotto.com/rotto/full-stack-assessment/avatars/avatar-059.svg"><div class="t"><div class="n">Felix Walsh</div><div class="s">Senior Full Stack Engineer at Lumen Labs · New York · 9 yrs</div><div class="sk"><span class="tag hit">React</span><span class="tag">AWS</span><span class="tag">Next.js</span><span class="tag">Node.js</span></div></div><span class="sl">+ Shortlist</span></div>
+        <div class="row"><img src="https://rotto.com/rotto/full-stack-assessment/avatars/avatar-074.svg"><div class="t"><div class="n">Mei Haddad</div><div class="s">Senior Full Stack Engineer at Tidal Health · New York · 8 yrs</div><div class="sk"><span class="tag hit">React</span><span class="tag">AWS</span><span class="tag">Postgres</span></div></div><span class="sl">+ Shortlist</span></div>
+      </div>
+    </div>
+    <div class="prof" style="width:340px;flex:none">
+      <div style="display:flex;justify-content:space-between"><img class="av" src="https://rotto.com/rotto/full-stack-assessment/avatars/avatar-059.svg"><span class="sub" style="font-size:16px">×</span></div>
+      <h4>Felix Walsh</h4><div class="sub">Senior Full Stack Engineer · New York · 9 years</div>
+      <div class="pbtn" style="margin-top:12px"><span class="primary">+ Shortlist</span></div>
+      <div class="h">Experience</div>
+      <div class="exp"><img src="https://rotto.com/rotto/full-stack-assessment/logos/lumen-labs.svg"><div>Senior Full Stack Engineer<br><span class="sub">Lumen Labs · Startup · 2022 to now</span></div></div>
+      <div class="exp"><img src="https://rotto.com/rotto/full-stack-assessment/logos/paperplane.svg"><div>Full Stack Engineer<br><span class="sub">Paperplane · Startup · 2020 to 2022</span></div></div>
+      <div class="exp"><img src="https://rotto.com/rotto/full-stack-assessment/logos/northwind-ai.svg"><div>Junior Full Stack Engineer<br><span class="sub">Northwind AI · Startup · 2019 to 2020</span></div></div>
+      <div class="h">Education</div>
+      <div>University of Washington<br><span class="sub">BA Computer Science · 2017</span></div>
+      <div class="h">Skills</div>
+      <div class="sk" style="display:flex;gap:4px;flex-wrap:wrap"><span class="tag hit">React</span><span class="tag">AWS</span><span class="tag">Next.js</span><span class="tag">Node.js</span></div>
+    </div>
+  </div>
+</div>
+
+<h3 style="margin-top:28px">Phone: results, then an open candidate</h3>
+<div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+  <div class="phone"><div class="m">
+    <div class="top" style="padding:10px 14px"><span class="logo">Rotto</span><div class="plan"><span>0 left</span><span class="up">Upgrade</span></div></div>
+    <div style="padding:12px 12px 8px;display:flex;flex-direction:column;gap:9px">
+      <div class="brief" style="font-size:12px"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">senior React engineers in New York…</span><span class="go">Go</span></div>
+      <div class="chips" style="flex-wrap:nowrap;overflow:hidden;margin-right:-12px"><span class="chip">Senior <span class="x">×</span></span><span class="chip">React <span class="x">×</span></span><span class="chip">New York <span class="x">×</span></span><span class="chip">Startup <span class="x">×</span></span><span class="chip add">+</span></div>
+      <div class="meta"><span>21 people</span><span class="save">Save search</span></div>
+    </div>
+    <div class="row"><img src="https://rotto.com/rotto/full-stack-assessment/avatars/avatar-072.svg"><div class="t"><div class="n">Elena Costa</div><div class="s">Fernway · 9 yrs</div><div class="sk"><span class="tag hit">React</span><span class="tag">AWS</span></div></div><span class="sl on">✓</span></div>
+    <div class="row"><img src="https://rotto.com/rotto/full-stack-assessment/avatars/avatar-059.svg"><div class="t"><div class="n">Felix Walsh</div><div class="s">Lumen Labs · 9 yrs</div><div class="sk"><span class="tag hit">React</span><span class="tag">Next.js</span></div></div><span class="sl">+</span></div>
+    <div class="row"><img src="https://rotto.com/rotto/full-stack-assessment/avatars/avatar-074.svg"><div class="t"><div class="n">Mei Haddad</div><div class="s">Tidal Health · 8 yrs</div><div class="sk"><span class="tag hit">React</span><span class="tag">AWS</span></div></div><span class="sl">+</span></div>
+    <div class="row"><img src="https://rotto.com/rotto/full-stack-assessment/avatars/avatar-044.svg"><div class="t"><div class="n">Lucas Singh</div><div class="s">Brightpath · 7 yrs</div><div class="sk"><span class="tag hit">React</span><span class="tag">GraphQL</span></div></div><span class="sl">+</span></div>
+    <div style="margin-top:auto;display:flex;justify-content:space-around;border-top:1px solid #e7e7e4;background:#fff;padding:9px 0 12px;font-size:11px;color:#6f6f6a"><b style="color:#1c1c1a;font-weight:500">Search</b><span>Shortlists</span><span>Saved</span></div>
+  </div></div>
+
+  <div class="phone"><div class="m" style="background:#55554f">
+    <div style="opacity:.35;background:#f6f6f5;height:70px"></div>
+    <div style="position:absolute;inset:44px 0 0 0;background:#fff;border-radius:18px 18px 0 0;padding:10px 16px 16px;box-shadow:0 -8px 24px rgb(24 24 27 / .2)">
+      <div style="width:36px;height:4px;background:#d6d6d2;border-radius:9px;margin:0 auto 12px"></div>
+      <img class="av" style="width:48px;height:48px;border-radius:999px" src="https://rotto.com/rotto/full-stack-assessment/avatars/avatar-059.svg">
+      <h4 style="margin:8px 0 2px;font-size:16px;font-weight:600">Felix Walsh</h4><div class="sub">Senior Full Stack Engineer · New York · 9 years</div>
+      <div style="margin-top:12px"><span class="primary" style="display:block;text-align:center;padding:9px">+ Shortlist</span></div>
+      <div class="h">Experience</div>
+      <div class="exp"><img src="https://rotto.com/rotto/full-stack-assessment/logos/lumen-labs.svg"><div>Senior Full Stack Engineer<br><span class="sub">Lumen Labs · 2022 to now</span></div></div>
+      <div class="exp"><img src="https://rotto.com/rotto/full-stack-assessment/logos/paperplane.svg"><div>Full Stack Engineer<br><span class="sub">Paperplane · 2020 to 2022</span></div></div>
+      <div class="h">Education</div><div>University of Washington<br><span class="sub">BA Computer Science · 2017</span></div>
+      <div class="h">Skills</div><div style="display:flex;gap:4px;flex-wrap:wrap"><span class="tag hit">React</span><span class="tag">AWS</span><span class="tag">Next.js</span><span class="tag">Node.js</span></div>
+    </div>
+  </div></div>
+</div>
+
+
+
+</body></html>

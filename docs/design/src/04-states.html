@@ -1,0 +1,89 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;padding:36px 40px;background:#ffffff;color:#1c1c1a;font-family:"Instrument Sans",system-ui,sans-serif}
+h2{font-size:24px;font-weight:600;letter-spacing:-.01em;margin:0 0 6px}
+h3{font-size:16px;font-weight:600;margin:0 0 6px}
+.subtitle{color:#6f6f6a;font-size:14px;max-width:110ch;margin:0 0 18px;line-height:1.5}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:20px}
+.card{border:1px solid #e7e7e4;border-radius:14px;overflow:hidden;background:#fff}
+.card-image{padding:14px;background:#f4f4f2}
+.card-body{padding:14px 16px}.card-body p{color:#55554f;font-size:13px;line-height:1.5;margin:0}
+</style></head><body><style>
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap');
+.g{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px;margin-top:14px}
+.st h3{margin:0 0 6px;font-size:14px}.st p.why{margin:6px 0 0;font-size:12.5px;color:#666}
+.s{--bg:#f6f6f5;--surf:#fff;--fg:#1c1c1a;--mut:#6f6f6a;--line:#efefed;--line2:#d6d6d2;--tag:#f1f1ef;--acc:#c2410c;--onacc:#fff;--accbg:#fdf0e9;--accline:#f5c6ad;--warn:#92400e;--warnbg:#fef6e7;--warnline:#f3d79b;--err:#b42318;--errbg:#fef3f2;
+font-family:"Instrument Sans",system-ui,sans-serif;border-radius:12px;overflow:hidden;font-size:12.5px;line-height:1.45;border:1px solid var(--line2);background:var(--bg);color:var(--fg);min-height:250px}
+.s *{box-sizing:border-box}
+.s .body{padding:12px 14px;display:flex;flex-direction:column;gap:9px}
+.s .brief{border:1px solid var(--line2);border-radius:10px;background:var(--surf);padding:9px 11px;display:flex;justify-content:space-between;gap:8px;align-items:center}
+.s .go{background:var(--acc);color:var(--onacc);border-radius:7px;padding:3px 10px;font-size:11.5px;font-weight:500;white-space:nowrap}
+.s .go.busy{opacity:.7}
+.s .chips{display:flex;gap:6px;flex-wrap:wrap}
+.s .chip{border:1px solid var(--line2);border-radius:999px;padding:2px 9px;background:var(--surf);font-size:11.5px}
+.s .chip span{color:var(--mut)}
+.s .chip.warn{border-color:var(--warnline);background:var(--warnbg);color:var(--warn)}
+.s .chip.ghost{border-style:dashed;color:var(--mut);background:transparent}
+.s .row{display:flex;gap:10px;align-items:center;padding:10px 14px;border-top:1px solid var(--line);background:var(--surf)}
+.sk{background:linear-gradient(90deg,#ececea 0%,#f5f5f3 50%,#ececea 100%);border-radius:6px}
+.s .center{padding:22px 18px;text-align:left;display:flex;flex-direction:column;gap:8px}
+.s .center h4{margin:0;font-size:14px;font-weight:600}
+.s .mut{color:var(--mut)}
+.s .btn{align-self:flex-start;background:var(--acc);color:var(--onacc);border-radius:7px;padding:5px 12px;font-weight:500}
+.s .btn2{align-self:flex-start;border:1px solid var(--line2);background:var(--surf);border-radius:7px;padding:5px 12px;font-weight:500}
+.s .bar{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px}
+.s .bar.err{background:var(--errbg);color:var(--err)}
+.s .bar.acc{background:var(--accbg);border:1px solid var(--accline)}
+.s .ex{border:1px solid var(--line2);border-radius:999px;padding:3px 10px;background:var(--surf);font-size:11.5px;display:inline-block;margin:0 4px 4px 0}
+.modal{background:var(--surf);border:1px solid var(--line2);border-radius:14px;margin:16px;padding:16px;box-shadow:0 20px 50px rgb(28 28 26 / .18)}
+</style>
+
+<h2>Loading, empty, error and plan states</h2>
+<p class="subtitle">The brief grades "loading, empty and error states are all handled clearly" and "the free plan limit and how to upgrade are clear". Every state says what happened and what to do next, in one plain sentence. Look: Graphite &amp; Signal (your pick).</p>
+
+<div class="g">
+
+<div class="st"><h3>1. First visit (nothing searched yet)</h3>
+<div class="s"><div class="body"><div class="brief"><span class="mut">Describe who you're looking for…</span><span class="go">Search</span></div></div>
+<div class="center"><h4>Describe the people you want, in plain English.</h4><div class="mut">Role, skills, city, seniority, experience, education. For example:</div><div><span class="ex">senior React engineers in New York who have worked at a startup</span><span class="ex">data scientists with a PhD</span><span class="ex">product designers in San Francisco open to work</span></div><div class="mut" style="font-size:11.5px">Free plan: 1 search included.</div></div></div>
+<p class="why">Tapping an example fills the box; it does not run it (so a free user never burns their one search by accident).</p></div>
+
+<div class="st"><h3>2. Searching (about 1 to 2 seconds)</h3>
+<div class="s"><div class="body"><div class="brief"><span>senior React engineers in New York who have worked at a startup</span><span class="go busy">Searching…</span></div><div class="chips"><span class="chip sk" style="width:90px;height:22px;border:0"></span><span class="chip sk" style="width:70px;height:22px;border:0"></span><span class="chip sk" style="width:100px;height:22px;border:0"></span></div><div class="mut" style="font-size:11.5px">Reading your brief…</div></div>
+<div class="row"><div class="sk" style="width:32px;height:32px;border-radius:99px"></div><div style="flex:1"><div class="sk" style="height:10px;width:40%;margin-bottom:6px"></div><div class="sk" style="height:9px;width:70%"></div></div></div>
+<div class="row"><div class="sk" style="width:32px;height:32px;border-radius:99px"></div><div style="flex:1"><div class="sk" style="height:10px;width:35%;margin-bottom:6px"></div><div class="sk" style="height:9px;width:62%"></div></div></div></div>
+<p class="why">Skeletons in the exact shape of chips and result rows, so nothing jumps when results arrive. Paging shows skeleton rows only.</p></div>
+
+<div class="st"><h3>3. Nobody matches</h3>
+<div class="s"><div class="body"><div class="chips"><span class="chip"><span>Seniority</span> Junior ×</span><span class="chip"><span>Skill</span> Rust ×</span><span class="chip"><span>City</span> Miami ×</span><span class="chip"><span>Open to work</span> ×</span></div></div>
+<div class="center"><h4>No one matches all 4 filters.</h4><div class="mut">Remove a filter above to widen the search. Each change re-runs instantly and doesn't use a search.</div><span class="btn2">Clear filters</span></div></div>
+<p class="why">Points at the fix (the chips) and reassures that correcting is free.</p></div>
+
+<div class="st"><h3>4. Something the data can't answer</h3>
+<div class="s"><div class="body"><div class="chips"><span class="chip"><span>Role</span> Product Manager ×</span><span class="chip warn">Speaks Japanese · not in our data ×</span></div></div>
+<div class="center"><h4>We can't filter by language, so we're not guessing.</h4><div class="mut">Remove the highlighted filter to see Product Managers without it.</div></div></div>
+<p class="why">The brief: "returning nothing is better than returning the wrong people". Same pattern for unclear words ("experienced" → "pick a seniority").</p></div>
+
+<div class="st"><h3>5. Search failed</h3>
+<div class="s"><div class="body"><div class="brief"><span>senior React engineers in New York who have worked at a startup</span><span class="go">Search</span></div>
+<div class="bar err"><span>!</span><div><b>The search didn't go through.</b><div>It wasn't counted against your plan. Please try again.</div><span class="btn2" style="margin-top:8px;display:inline-block;color:var(--fg)">Try again</span></div></div></div></div>
+<p class="why">Says the important thing first: the free search was refunded. Retry keeps the brief.</p></div>
+
+<div class="st"><h3>6. Free search used up</h3>
+<div class="s"><div class="body"><div class="bar acc"><div style="flex:1"><b>You've used your free search.</b><div class="mut">You can still refine its filters, open candidates, and shortlist. Upgrade to run new searches.</div></div><span class="btn">Upgrade</span></div>
+<div class="brief" style="opacity:.6"><span class="mut">New searches need the paid plan</span><span class="go" style="background:#b7b7b2">Search</span></div>
+<div class="chips"><span class="chip"><span>Seniority</span> Senior ×</span><span class="chip"><span>Skill</span> React ×</span><span class="chip ghost">+ Filter</span></div></div></div>
+<p class="why">Shown before they try (the plan is known), not only after a 402. Makes clear what still works.</p></div>
+
+<div class="st"><h3>7. Upgrade (explains, no checkout)</h3>
+<div class="s" style="background:#55554f"><div class="modal"><h4 style="margin:0 0 6px;font-size:15px">Upgrade to the paid plan</h4><div class="mut" style="margin-bottom:10px">Unlimited searches for everyone at your company.</div><div style="display:flex;flex-direction:column;gap:6px"><div>1. Your admin subscribes through Stripe.</div><div>2. Stripe confirms the payment with us.</div><div>3. Your plan switches to paid automatically, usually within seconds.</div></div><div style="margin-top:12px;display:flex;gap:8px"><span class="btn" style="align-self:auto">Got it</span></div></div></div>
+<p class="why">The brief: "an Upgrade button that explains how to upgrade is enough".</p></div>
+
+<div class="st"><h3>8. No shortlists yet</h3>
+<div class="s"><div class="center"><h4>No shortlists yet.</h4><div class="mut">Shortlist someone from search results, or create an empty list to fill later.</div><div style="display:flex;gap:8px"><span class="btn" style="align-self:auto">Go to search</span><span class="btn2" style="align-self:auto">New list</span></div></div></div>
+<p class="why">Same pattern for "no saved searches yet" (points to the Save search button).</p></div>
+
+</div>
+
+</body></html>

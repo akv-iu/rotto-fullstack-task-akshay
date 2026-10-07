@@ -1,0 +1,126 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;padding:36px 40px;background:#ffffff;color:#1c1c1a;font-family:"Instrument Sans",system-ui,sans-serif}
+h2{font-size:24px;font-weight:600;letter-spacing:-.01em;margin:0 0 6px}
+h3{font-size:16px;font-weight:600;margin:0 0 6px}
+.subtitle{color:#6f6f6a;font-size:14px;max-width:110ch;margin:0 0 18px;line-height:1.5}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:20px}
+.card{border:1px solid #e7e7e4;border-radius:14px;overflow:hidden;background:#fff}
+.card-image{padding:14px;background:#f4f4f2}
+.card-body{padding:14px 16px}.card-body p{color:#55554f;font-size:13px;line-height:1.5;margin:0}
+</style></head><body><style>
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap');
+.m{font-family:Geist,system-ui,sans-serif;color:#18181b;background:#fafafa;border-radius:10px;overflow:hidden;font-size:12px;line-height:1.4;height:430px;display:flex;flex-direction:column}
+.m *{box-sizing:border-box}
+.top{display:flex;align-items:center;gap:14px;padding:10px 14px;border-bottom:1px solid #e4e4e7;background:#fff}
+.logo{font-weight:600;letter-spacing:-.01em}
+.nav{display:flex;gap:12px;color:#71717a}.nav b{color:#18181b;font-weight:500}
+.plan{margin-left:auto;font-size:11px;color:#52525b;border:1px solid #e4e4e7;border-radius:999px;padding:2px 8px}
+.brief{margin:12px 14px 8px;border:1px solid #d4d4d8;border-radius:8px;background:#fff;padding:8px 10px;color:#18181b;display:flex;justify-content:space-between;align-items:center}
+.brief span.go{background:#1d4ed8;color:#fff;border-radius:6px;padding:3px 9px;font-size:11px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 8px}
+.chip{border:1px solid #d4d4d8;border-radius:999px;padding:2px 8px;background:#fff;font-size:11px}
+.chip i{font-style:normal;color:#a1a1aa;margin-left:4px}
+.meta{display:flex;justify-content:space-between;padding:0 14px 6px;color:#71717a;font-size:11px}
+.meta u{text-decoration:none;color:#1d4ed8}
+.row{display:flex;gap:10px;align-items:center;padding:8px 14px;border-top:1px solid #f0f0f1;background:#fff}
+.row img{width:30px;height:30px;border-radius:999px;background:#f4f4f5}
+.row .t{flex:1;min-width:0}.row .n{font-weight:500}.row .s{color:#71717a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.add{border:1px solid #d4d4d8;border-radius:6px;padding:2px 7px;font-size:11px;color:#3f3f46;background:#fff;white-space:nowrap}
+.add.on{border-color:#1d4ed8;color:#1d4ed8}
+.sheet{background:#fff;border-left:1px solid #e4e4e7;padding:14px;overflow:hidden}
+.sheet img.av{width:44px;height:44px;border-radius:999px}
+.sheet h4{margin:8px 0 2px;font-size:14px;font-weight:600}
+.sheet .sub{color:#71717a}
+.sheet .h{margin:12px 0 4px;font-size:11px;color:#71717a}
+.exp{display:flex;gap:8px;align-items:center;margin:4px 0}.exp img{width:18px;height:18px;border-radius:4px}
+.sk{display:flex;flex-wrap:wrap;gap:4px}.sk span{background:#f4f4f5;border-radius:4px;padding:1px 6px;font-size:11px}
+.btn{display:inline-block;margin-top:12px;background:#1d4ed8;color:#fff;border-radius:6px;padding:5px 10px;font-size:11px}
+.rail{width:120px;background:#fff;border-right:1px solid #e4e4e7;padding:12px 10px;display:flex;flex-direction:column;gap:6px;color:#52525b}
+.rail b{color:#18181b;font-weight:500;background:#f4f4f5;border-radius:6px;padding:4px 6px}
+.rail span{padding:4px 6px}.rail .lists{margin-top:10px;font-size:11px;color:#a1a1aa}
+</style>
+
+<h2>Layout options considered</h2>
+<p class="subtitle">Same content in all three: the brief, the filters it understood, results, and an open candidate. Real data from the first sample query. We chose a mix of A and B after researching established tools (see 02).</p>
+
+<div class="cards">
+
+<div class="card" data-choice="a" onclick="toggleSelect(this)">
+<div class="card-image">
+<div class="m">
+  <div class="top"><span class="logo">Rotto</span><div class="nav"><b>Search</b><span>Shortlists</span><span>Saved</span></div><span class="plan">Free · 0 searches left</span></div>
+  <div style="display:flex;flex:1;min-height:0">
+    <div style="flex:1;min-width:0">
+      <div class="brief">senior React engineers in New York who have worked at a startup <span class="go">Search</span></div>
+      <div class="chips"><span class="chip">Senior<i>×</i></span><span class="chip">React<i>×</i></span><span class="chip">New York<i>×</i></span><span class="chip">Worked at a startup<i>×</i></span><span class="chip" style="border-style:dashed;color:#71717a">+ Filter</span></div>
+      <div class="meta"><span>21 people</span><u>Save search</u></div>
+      <div class="row"><img src="https://rotto.com/rotto/full-stack-assessment/avatars/avatar-072.svg"><div class="t"><div class="n">Elena Costa</div><div class="s">Senior Full Stack Engineer at Fernway · 9 yrs</div></div><span class="add on">Shortlisted</span></div>
+      <div class="row"><img src="https://rotto.com/rotto/full-stack-assessment/avatars/avatar-059.svg"><div class="t"><div class="n">Felix Walsh</div><div class="s">Senior Full Stack Engineer at Lumen Labs · 9 yrs</div></div><span class="add">+ Shortlist</span></div>
+      <div class="row"><img src="https://rotto.com/rotto/full-stack-assessment/avatars/avatar-074.svg"><div class="t"><div class="n">Mei Haddad</div><div class="s">Senior Full Stack Engineer at Tidal Health · 8 yrs</div></div><span class="add">+ Shortlist</span></div>
+    </div>
+    <div class="sheet" style="width:46%;box-shadow:-8px 0 24px rgb(24 24 27 / .06)">
+      <img class="av" src="https://rotto.com/rotto/full-stack-assessment/avatars/avatar-059.svg">
+      <h4>Felix Walsh</h4><div class="sub">New York · 9 years</div>
+      <div class="h">Experience</div>
+      <div class="exp"><img src="https://rotto.com/rotto/full-stack-assessment/logos/lumen-labs.svg"><div>Senior Full Stack Engineer<br><span class="sub">Lumen Labs · 2022 to now</span></div></div>
+      <div class="exp"><img src="https://rotto.com/rotto/full-stack-assessment/logos/paperplane.svg"><div>Full Stack Engineer<br><span class="sub">Paperplane · 2020 to 2022</span></div></div>
+      <div class="h">Skills</div><div class="sk"><span>AWS</span><span>Next.js</span><span>Node.js</span><span>React</span></div>
+      <span class="btn">+ Shortlist</span>
+    </div>
+  </div>
+</div>
+</div>
+<div class="card-body"><h3>A. Single column + slide-over profile</h3><p>One calm column of results. Opening a candidate slides a panel over the right side; on a phone it becomes a bottom sheet. Navigation in a slim top bar. Most focused, closest to "minimal".</p></div>
+</div>
+
+<div class="card" data-choice="b" onclick="toggleSelect(this)">
+<div class="card-image">
+<div class="m">
+  <div class="top"><span class="logo">Rotto</span><div class="nav"><b>Search</b><span>Shortlists</span><span>Saved</span></div><span class="plan">Free · 0 searches left</span></div>
+  <div class="brief">senior React engineers in New York who have worked at a startup <span class="go">Search</span></div>
+  <div class="chips"><span class="chip">Senior<i>×</i></span><span class="chip">React<i>×</i></span><span class="chip">New York<i>×</i></span><span class="chip">Worked at a startup<i>×</i></span></div>
+  <div style="display:flex;flex:1;min-height:0;border-top:1px solid #e4e4e7">
+    <div style="width:52%">
+      <div class="meta" style="padding-top:6px"><span>21 people</span><u>Save search</u></div>
+      <div class="row"><img src="https://rotto.com/rotto/full-stack-assessment/avatars/avatar-072.svg"><div class="t"><div class="n">Elena Costa</div><div class="s">Fernway · 9 yrs</div></div></div>
+      <div class="row" style="background:#eff6ff"><img src="https://rotto.com/rotto/full-stack-assessment/avatars/avatar-059.svg"><div class="t"><div class="n">Felix Walsh</div><div class="s">Lumen Labs · 9 yrs</div></div></div>
+      <div class="row"><img src="https://rotto.com/rotto/full-stack-assessment/avatars/avatar-074.svg"><div class="t"><div class="n">Mei Haddad</div><div class="s">Tidal Health · 8 yrs</div></div></div>
+      <div class="row"><img src="https://rotto.com/rotto/full-stack-assessment/avatars/avatar-044.svg"><div class="t"><div class="n">Lucas Singh</div><div class="s">Brightpath · 7 yrs</div></div></div>
+    </div>
+    <div class="sheet" style="flex:1">
+      <img class="av" src="https://rotto.com/rotto/full-stack-assessment/avatars/avatar-059.svg">
+      <h4>Felix Walsh</h4><div class="sub">Senior Full Stack Engineer · New York · 9 years</div>
+      <div class="h">Experience</div>
+      <div class="exp"><img src="https://rotto.com/rotto/full-stack-assessment/logos/lumen-labs.svg"><div>Lumen Labs<br><span class="sub">2022 to now</span></div></div>
+      <div class="exp"><img src="https://rotto.com/rotto/full-stack-assessment/logos/paperplane.svg"><div>Paperplane<br><span class="sub">2020 to 2022</span></div></div>
+      <div class="h">Skills</div><div class="sk"><span>AWS</span><span>Next.js</span><span>Node.js</span><span>React</span></div>
+      <span class="btn">+ Shortlist</span>
+    </div>
+  </div>
+</div>
+</div>
+<div class="card-body"><h3>B. Split view (list + profile side by side)</h3><p>Like an email inbox: click a person on the left, their profile shows on the right. Fast to skim many candidates on desktop. On a phone it becomes list, then full-screen profile.</p></div>
+</div>
+
+<div class="card" data-choice="c" onclick="toggleSelect(this)">
+<div class="card-image">
+<div class="m" style="flex-direction:row">
+  <div class="rail"><span class="logo" style="padding:0 6px 8px;color:#18181b">Rotto</span><b>Search</b><span>Shortlists</span><span>Saved</span><div class="lists">LISTS</div><span>Frontend NYC (4)</span><span>Startup seniors (2)</span><span style="margin-top:auto;font-size:11px">Free · 0 left</span></div>
+  <div style="flex:1;min-width:0">
+    <div class="brief">senior React engineers in New York who have worked at a startup <span class="go">Search</span></div>
+    <div class="chips"><span class="chip">Senior<i>×</i></span><span class="chip">React<i>×</i></span><span class="chip">New York<i>×</i></span><span class="chip">Worked at a startup<i>×</i></span></div>
+    <div class="meta"><span>21 people</span><u>Save search</u></div>
+    <div class="row"><img src="https://rotto.com/rotto/full-stack-assessment/avatars/avatar-072.svg"><div class="t"><div class="n">Elena Costa</div><div class="s">Senior Full Stack Engineer at Fernway · 9 yrs</div></div><span class="add on">Shortlisted</span></div>
+    <div class="row"><img src="https://rotto.com/rotto/full-stack-assessment/avatars/avatar-059.svg"><div class="t"><div class="n">Felix Walsh</div><div class="s">Senior Full Stack Engineer at Lumen Labs · 9 yrs</div></div><span class="add">+ Shortlist</span></div>
+    <div class="row"><img src="https://rotto.com/rotto/full-stack-assessment/avatars/avatar-074.svg"><div class="t"><div class="n">Mei Haddad</div><div class="s">Senior Full Stack Engineer at Tidal Health · 8 yrs</div></div><span class="add">+ Shortlist</span></div>
+    <div class="row"><img src="https://rotto.com/rotto/full-stack-assessment/avatars/avatar-044.svg"><div class="t"><div class="n">Lucas Singh</div><div class="s">Senior Full Stack Engineer at Brightpath · 7 yrs</div></div><span class="add">+ Shortlist</span></div>
+  </div>
+</div>
+</div>
+<div class="card-body"><h3>C. Sidebar app</h3><p>A left sidebar with navigation and your shortlists always visible. Feels like a full tool (Linear, Notion). More chrome on screen; on a phone the sidebar hides behind a menu button.</p></div>
+</div>
+
+</div>
+</body></html>
