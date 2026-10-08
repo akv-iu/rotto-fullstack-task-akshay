@@ -1,10 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { COMPANY, admin, api, signIn } from './helpers';
+import { COMPANY, admin, api, resetCompany, signIn } from './helpers';
 
 const scores: { precision: number; recall: number; p20: number }[] = [];
 // The "baseline / best eval score" for SCORING.md and the README: the mean over every sample.
-afterAll(() => {
+afterAll(async () => {
+  await resetCompany('acme'); // the eval switches acme to paid; don't leave it that way for manual testing
   if (!scores.length) return;
   const mean = (k: 'precision' | 'recall' | 'p20') => scores.reduce((a, s) => a + s[k], 0) / scores.length;
   const p = mean('precision'), r = mean('recall');

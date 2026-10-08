@@ -24,8 +24,9 @@ beforeAll(async () => {
 
 describe('acme cannot read globex data directly through Supabase', () => {
   it.each(['shortlists', 'shortlist_members', 'saved_briefs', 'searches', 'companies', 'recruiters'])('%s shows no globex rows', async (table) => {
-    const { data } = await acme.from(table).select('*');
-    expect(JSON.stringify(data ?? [])).not.toContain(COMPANY.globex);
+    const { data, error } = await acme.from(table).select('*');
+    expect(error).toBeNull(); // an error would make "no globex rows" true for the wrong reason
+    expect(JSON.stringify(data)).not.toContain(COMPANY.globex);
   });
 
   it.each(['subscriptions', 'billing_events'])('%s is not readable at all', async (table) => {
@@ -70,8 +71,9 @@ describe('acme cannot change anything it does not own, directly through Supabase
       await acme.from(table).update(patch).eq(col, val);
       await acme.from(table).delete().eq(col, val);
     }
-    // Planting a member on globex's list while claiming to be acme: blocked by the composite key.
-    expect((await acme.from('shortlist_members').insert({ shortlist_id: globexList, company_id: COMPANY.acme, candidate_id: 'cand_0002' })).error).toBeTruthy();
+    // Planting a member on globex's list while claiming to be acme: blocked by the composite key, even with the
+    // server's key (recruiters can't insert at all, so this is the server-side guarantee). 23503 = foreign key violation.
+    expect((await admin().from('shortlist_members').insert({ shortlist_id: globexList, company_id: COMPANY.acme, candidate_id: 'cand_0002' })).error?.code).toBe('23503');
     await acme.rpc('complete_search', { p_search: globexSearch, p_filters: {} });
     await acme.rpc('refund_search', { p_search: globexSearch });
     expect(await snapshot()).toEqual(before);

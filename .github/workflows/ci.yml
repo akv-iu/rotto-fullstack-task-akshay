@@ -10,6 +10,8 @@ jobs:
       # Deliberately NOT the sample secret: proves we work with the grader's own secret.
       STRIPE_WEBHOOK_SECRET: whsec_ci_not_the_sample_secret
     steps:
+      - name: the AI tests must run, not silently skip
+        run: test -n "$OPENAI_API_KEY" || { echo "::error::The OPENAI_API_KEY repo secret is missing, so the accuracy, free-plan and search-speed tests would be skipped."; exit 1; }
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:

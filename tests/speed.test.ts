@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest';
-import { COMPANY, admin, api, asUser, signIn } from './helpers';
+import { afterAll, describe, expect, it } from 'vitest';
+import { COMPANY, admin, api, asUser, resetCompany, signIn } from './helpers';
 
-const p95 = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length * 0.95) - 1];
+afterAll(() => resetCompany('acme')); // these tests switch acme to paid; don't leave it that way for manual testing
+
+const p95 = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.ceil(xs.length * 0.95) - 1];
 const time = async (fn: () => Promise<unknown>) => { const t = performance.now(); await fn(); return performance.now() - t; };
 
 describe('speed (our targets have margin: the grader allows 300 ms / 3 s)', () => {

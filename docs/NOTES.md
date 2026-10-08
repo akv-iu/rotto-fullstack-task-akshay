@@ -148,8 +148,24 @@ We build our own Supabase **on the local machine**. Nothing exists anywhere unti
 | What | Result | How measured |
 |---|---|---|
 | Accuracy | 10/10 samples exact: P = R = F1 = P@20 = 1.000; 17 extra briefs pass | `tests/accuracy.test.ts` (POST, page to the end) |
-| New search | p95 1.49 s (grader allows 3 s); five demo briefs 1.4 to 2.0 s | `tests/speed.test.ts` |
+| New search | p95 1.5 to 2.1 s across runs (OpenAI's speed varies; grader allows 3 s); five demo briefs 1.4 to 2.0 s | `tests/speed.test.ts` (p95 = the slowest of 10 since the audit below) |
 | Paging | p95 69 ms (grader allows 300 ms) | `tests/speed.test.ts` |
 | Tokens per search | ~2,200 input (2,048 cached), ~90 output | `LOG_LLM_USAGE=1`, five searches |
 | Cost per search | **≈ $0.0004** (≈ $0.001 when the cache is cold) | $0.40 / $0.10 cached / $1.60 output per 1M tokens, checked on OpenAI's model page 2026-10-08 |
 | Secrets in the browser | 0 leaks in 56 build files and 86 files served by the dev server | `scripts/check-secrets.mjs` (also in CI) |
+
+## 8. Test audit (2026-10-08): could any test pass without protecting us?
+
+**Method:** broke the real code 14 ways (search returning everyone, ignored unsupported filters, no free limit, refunding a finished search, older billing events winning, repeats re-applied, three tables readable across companies, candidates readable directly, no webhook signature check, paging using a search, invented filter values kept, AI failure not refunded) and ran the tests that should notice. Every break was confirmed applied before testing and restored after. Script: `.superpowers/sdd/README/mutate.mjs` (local only).
+
+| Found | Fixed |
+|---|---|
+| An AI failure that skipped the refund passed every test | `tests/search-refund.test.ts`: OpenAI times out (only that call is faked) → 502, search refunded, counter back to 0. Now caught |
+| CI has no `OPENAI_API_KEY` secret, so 33 of 113 tests (all accuracy, the 20-at-once quota test, search speed) skipped and CI was still green | CI now fails loudly when the secret is missing; the secret has to be added to the repo |
+| "Acme sees no globex rows" also passed if the read errored | asserts no error first |
+| The composite-key check passed for the wrong reason (recruiters can't insert at all) | now inserts with the server key and expects a foreign-key violation (23503); proven by dropping the key |
+| Speed and accuracy tests left acme on the paid plan | both reset acme afterwards |
+| p95 took the 9th of 10 timings | now the 10th (true p95 for 10 samples) |
+| Tests clear acme's and globex's shortlists and saved searches, in the same database used for manual testing | not changed: run `make test` before manual testing, not after |
+
+Result after fixes: 14 of 14 breaks caught; full suite 111 passed, 3 skipped (the no-keys checks, run by CI's `no-keys` job).
