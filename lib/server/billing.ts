@@ -1,6 +1,6 @@
 import 'server-only';
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { must } from './http';
+import { must, unstorable } from './http';
 import { adminClient } from './supabase';
 
 /**
@@ -38,6 +38,7 @@ export async function processStripeWebhook(raw: Buffer | string, signatureHeader
 
   let event: StripeEvent;
   try { event = JSON.parse(raw.toString()); } catch { return ignored('not JSON'); }
+  if (unstorable(event)) return ignored('text the database cannot store');
   if (!event || typeof event !== 'object' || Array.isArray(event)) return ignored('not an object');
   const sub = event.data?.object;
   const company = sub?.metadata?.company;

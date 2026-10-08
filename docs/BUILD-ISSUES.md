@@ -184,6 +184,25 @@ Light and dark screenshots look the same as before. MacBooks (2× screens, up to
 
 ---
 
+## 17. Odd text in a request crashed the server with a 500
+
+**Found in the brief-by-brief audit.** The brief scores hostile searches on "doesn't crash", and says the webhook returns "400 for a bad signature and 200 otherwise".
+
+**Cause:** Postgres refuses to store a NUL character (` `) or half an emoji (a lone surrogate). These came back as 500s from:
+- a search brief, a shortlist name, a saved search's brief or filter value;
+- a correctly signed Stripe event.
+
+Filters nested 5,000 levels deep overflowed the call stack, which was also a 500.
+
+**Fix:** `unstorable()` in `lib/server/http.ts` walks the parsed body with its own stack, so deep input can't overflow it, and rejects that text and nesting deeper than 20. Every recruiter request body goes through `readJson`, which now answers 400 with a clear message. The webhook verifies the signature first and then ignores such an event with 200.
+
+**Proof:**
+- `tests/hostile-input.test.ts`: 6 tests failed (all 500) before the fix and pass after it.
+- A probe of 28 malformed requests across every route: 0 server errors.
+- Full suite: 117 passed.
+
+---
+
 ## Smaller changes from the plan, all recorded in the progress log
 
 - TypeScript 5 rather than the brand-new version 7, because Next.js 16's build uses TypeScript 5.
