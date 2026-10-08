@@ -48,6 +48,11 @@ This is a running record of *why* things are the way they are. It's useful for t
   - "**React** engineers" means the *skill* React, with no role filter. Adding a Frontend role filter gives 6 of 21.
   - "worked at a startup" means *any* job in the history. Current job only gives 19 of 21.
   - "enterprise sales experience" means the *skill* "Enterprise Sales". "Has worked at an enterprise company" gives 15 of 22.
+- **"Not X" briefs (exclusions), checked 2026-10-08.** Our filters can only *require* values, so an exclusion is answered by listing every other value, and that is exact only where each person has **one** value. Checked in the database: all 5,000 people have exactly 1 degree, 1 school and 1 field of study (nobody has both a BS and a PhD, and nobody has none), plus 1 role, seniority, city and current company type.
+  - Answered exactly: "without a PhD" → degrees BA/BS/MBA/MS (276 data scientists, the same count as "data scientists whose degree is not PhD"); "not in San Francisco" → the other 9 cities; "didn't go to Stanford" → the other 12 schools; "not senior" → junior/mid/staff; "not currently at a startup" → current company type enterprise; "not open to work" → open_to_work false.
+  - Flagged as "can't search for this" (0 results, with the reason): "doesn't know Java", "never worked at X", "no startup experience". People have several skills and past jobs, so no list of other values can exclude one of them.
+  - Why it changed: "data scientists without a PhD" dropped "without a PhD" in 2 of 4 runs and returned all 323 data scientists; "no startup experience" was dropped every time. After the prompt rule, 72 of 72 runs over 12 briefs were right (two rounds of 3 runs each), and the accuracy test (10 samples + extras, now including 5 exclusion briefs) passes 39 of 39.
+  - If the data ever gave people several degrees or schools, these lists would become wrong (someone with a BS and a PhD would match "without a PhD"), and the rule would have to move to "can't search for this".
 - `stripe-events.json`: the signature check uses the **full** `whsec_…` string as the key. The repeat has the **same event id with a new signature `t`**. The out-of-order pair must be ordered by `event.created`. Expected end state: **acme = free, globex = paid**.
 
 ## 3. Model test (2026-10-07, throwaway scripts, not in the repo)

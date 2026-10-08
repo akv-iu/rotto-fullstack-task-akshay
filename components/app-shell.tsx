@@ -52,7 +52,7 @@ export function TopBar() {
   return (
     <header className="sticky top-0 z-20 border-b border-line bg-surface">
       <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-6 px-4 md:px-6">
-        <Link href="/" className="text-base font-semibold tracking-tight">Rotto</Link>
+        <Link href="/?new" className="text-base font-semibold tracking-tight">Rotto</Link>
         <nav aria-label="Main" className="hidden gap-5 text-sm md:flex">
           {LINKS.map(({ href, label }) => (
             <Link key={href} href={href} aria-current={isActive(pathname, href) ? 'page' : undefined}

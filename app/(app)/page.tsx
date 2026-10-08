@@ -59,7 +59,7 @@ function SearchView() {
   // Coming back from Shortlists or Saved searches: start from the remembered screen, not empty (no flash, no request).
   const [cached] = useState(() => {
     const c = searchCache.get();
-    const wanted = params.get('search') ?? (params.get('saved') ? null : readLast());
+    const wanted = params.has('new') ? null : params.get('search') ?? (params.get('saved') ? null : readLast());
     return c && c.result.search_id === wanted ? c : null;
   });
   const [brief, setBrief] = useState(cached?.brief ?? '');
@@ -111,7 +111,13 @@ function SearchView() {
 
   // Restore /?search=<id> (after navigating away, or a reload). Paging never uses a search.
   // Plain / (the Search tab) brings back this tab's last search; typing a new brief still starts a new one.
+  // /?new (the Rotto logo) shows an empty search; the last search stays remembered for the Search tab.
   useEffect(() => {
+    if (params.has('new')) {
+      restored.current = null;
+      setResult(null); setRows([]); setBrief(''); setSearchedBrief(''); setStatus('idle'); setError(null); setOpenId(null);
+      return;
+    }
     const id = params.get('search');
     if (!id && !params.get('saved')) {
       const last = readLast();
