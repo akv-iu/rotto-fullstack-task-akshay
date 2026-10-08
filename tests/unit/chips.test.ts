@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chipsOf, removeChip, replaceValue, setScalar } from '@/components/search/chip-model';
+import { ENGINEERING_ROLES, chipsOf, removeChip, replaceGroup, replaceValue, setScalar } from '@/components/search/chip-model';
 
 const f = {
   seniorities: ['senior'], skills: ['React', 'AWS'], cities: ['New York'], worked_at_company_type: 'startup' as const,
@@ -27,5 +27,15 @@ describe('chip model', () => {
     expect(replaceValue(f, 'skills', 'AWS', 'React').skills).toEqual(['React']);
     expect(setScalar(f, 'min_years', 5).min_years).toBe(5);
     expect(f.skills).toEqual(['React', 'AWS']);
+  });
+
+  it('shows every engineering role as one "Any engineer" chip ("engineers in Texas" would otherwise be 7 chips)', () => {
+    const g = { roles: [...ENGINEERING_ROLES], skills: ['React'] };
+    const chips = chipsOf(g);
+    expect(chips.map((c) => (c.kind === 'unsupported' ? '' : `${c.label}:${c.text}`))).toEqual(['Role:Any engineer', 'Skill:React']);
+    expect(removeChip(g, chips[0])).toEqual({ skills: ['React'] });
+    expect(replaceGroup(g, 'Frontend Engineer')).toEqual({ roles: ['Frontend Engineer'], skills: ['React'] });
+    // A partial set stays as separate chips.
+    expect(chipsOf({ roles: ['Frontend Engineer', 'Backend Engineer'] })).toHaveLength(2);
   });
 });

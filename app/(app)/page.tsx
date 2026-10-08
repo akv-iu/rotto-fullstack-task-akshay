@@ -1,3 +1,162 @@
+'use client';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { PlanBanner, useAppState } from '@/components/app-shell';
+import { ChipBar } from '@/components/search/ChipBar';
+import { ResultRow } from '@/components/search/ResultRow';
+import { ErrorBar, FirstVisit, NoResults, RowSkeletons, SearchingSkeleton } from '@/components/search/states';
+import { Button } from '@/components/ui';
+import { ApiError, api } from '@/lib/client/api';
+import type { CandidateCard, PageResponse, SearchResponse } from '@/lib/server/search';
+import type { Filters } from '@/lib/shared/filters';
+
+type Status = 'idle' | 'searching' | 'refining' | 'done' | 'error';
+
+// The brief that produced a search, kept per tab so a restored search can still be saved. Storage may be blocked: ignore.
+const rememberBrief = (id: string, brief: string) => { try { sessionStorage.setItem(`brief:${id}`, brief); } catch {} };
+const readBrief = (id: string) => { try { return sessionStorage.getItem(`brief:${id}`) ?? ''; } catch { return ''; } };
+
 export default function SearchPage() {
-  return <p className="p-6 text-muted">Search arrives in Task 15.</p>;
+  return <Suspense><SearchView /></Suspense>;
+}
+
+function SearchView() {
+  const { plan, refreshPlan, openUpgrade } = useAppState();
+  const params = useSearchParams();
+  const router = useRouter();
+  const [brief, setBrief] = useState('');
+  const [searchedBrief, setSearchedBrief] = useState('');
+  const [result, setResult] = useState<SearchResponse | null>(null);
+  const [rows, setRows] = useState<CandidateCard[]>([]);
+  const [page, setPage] = useState(1);
+  const [status, setStatus] = useState<Status>('idle');
+  const [error, setError] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [moreState, setMoreState] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const lastRequest = useRef<{ body: object; kind: 'searching' | 'refining' } | null>(null);
+  const startedFromSaved = useRef(false);
+  const restored = useRef<string | null>(null);
+  const outOfSearches = plan?.plan === 'free' && plan.searches_remaining === 0;
+  const savable = Boolean(searchedBrief && result && Object.keys(result.filters).length && !result.filters.unsupported);
+
+  const run = useCallback(async (body: object, kind: 'searching' | 'refining', label: string) => {
+    lastRequest.current = { body, kind };
+    setStatus(kind); setError(null); setSaveState('idle');
+    try {
+      const r = await api<SearchResponse>('/api/search', { method: 'POST', body });
+      setResult(r); setRows(r.results); setPage(1); setSearchedBrief(label); setStatus('done'); setMoreState('idle');
+      // Keep the search in the URL: leaving the page or reloading brings it back, so a free user can still refine it.
+      restored.current = r.search_id;
+      rememberBrief(r.search_id, label);
+      router.replace(`/?search=${r.search_id}`, { scroll: false });
+    } catch (e) {
+      const err = e as ApiError;
+      if (err.status === 402) { openUpgrade(); setStatus(result ? 'done' : 'idle'); }
+      else { setError(err.message); setStatus('error'); }
+    } finally {
+      refreshPlan().catch(() => {});
+    }
+  }, [openUpgrade, refreshPlan, result, router]);
+
+  // Restore /?search=<id> (after navigating away, or a reload). Paging never uses a search.
+  useEffect(() => {
+    const id = params.get('search');
+    if (!id || restored.current === id) return;
+    restored.current = id;
+    setStatus('refining');
+    api<PageResponse>(`/api/search/${id}?page=1`)
+      .then((r) => {
+        setResult({ search_id: id, filters: r.filters, total: r.total, results: r.results, searches_remaining: null });
+        setRows(r.results); setPage(1); setSearchedBrief(readBrief(id)); setStatus('done');
+      })
+      .catch(() => { setStatus('idle'); router.replace('/'); });
+  }, [params, router]);
+
+  // Re-run a saved search: /?saved=<id>&brief=<text> (from the Saved searches page). Guarded for React StrictMode.
+  useEffect(() => {
+    const savedId = params.get('saved');
+    if (!savedId || startedFromSaved.current) return;
+    startedFromSaved.current = true;
+    const savedBrief = params.get('brief') ?? '';
+    setBrief(savedBrief);
+    router.replace('/');
+    run({ saved_brief_id: savedId }, 'searching', savedBrief);
+  }, [params, router, run]);
+
+  const search = () => { const text = brief.trim(); if (text) run({ brief: text }, 'searching', text); };
+  const refine = (filters: Filters) => result && run({ parent_search_id: result.search_id, filters }, 'refining', searchedBrief);
+
+  async function loadMore() {
+    if (!result) return;
+    setMoreState('loading');
+    try {
+      const r = await api<PageResponse>(`/api/search/${result.search_id}?page=${page + 1}`);
+      setRows((prev) => [...prev, ...r.results]); setPage(page + 1); setMoreState('idle');
+    } catch { setMoreState('error'); }
+  }
+
+  async function save() {
+    if (!result) return;
+    setSaveState('saving');
+    try { await api('/api/saved-briefs', { method: 'POST', body: { brief: searchedBrief, filters: result.filters } }); setSaveState('saved'); }
+    catch { setSaveState('error'); }
+  }
+
+  return (
+    <div className="flex items-start">
+      <section className="min-w-0 flex-1 px-4 py-5 md:px-6">
+        <PlanBanner />
+        <form onSubmit={(e) => { e.preventDefault(); search(); }}
+          className="flex items-center gap-2 rounded-xl border border-border bg-surface p-1.5 pl-3 focus-within:border-accent">
+          <label htmlFor="brief" className="sr-only">Describe who you&apos;re looking for</label>
+          <input id="brief" value={brief} maxLength={500} onChange={(e) => setBrief(e.target.value)} disabled={outOfSearches}
+            aria-describedby={outOfSearches ? 'brief-help' : undefined} placeholder="Describe who you're looking for…"
+            className="min-w-0 flex-1 bg-transparent py-1.5 outline-none placeholder:text-muted" />
+          <Button type="submit" variant="primary" disabled={outOfSearches || status === 'searching' || !brief.trim()}>
+            {status === 'searching' ? 'Searching…' : 'Search'}
+          </Button>
+        </form>
+        {outOfSearches && <p id="brief-help" className="mt-1.5 text-sm text-muted">New searches need the paid plan. You can still change the filters of your last search.</p>}
+
+        {status === 'idle' && !result && <FirstVisit onPick={setBrief} freeLeft={plan?.plan === 'free' ? plan.searches_remaining : null} />}
+        {status === 'searching' && <SearchingSkeleton />}
+        {status === 'refining' && !result && <RowSkeletons />}
+        {status === 'error' && error && (
+          <ErrorBar message={error} onRetry={lastRequest.current ? () => run(lastRequest.current!.body, lastRequest.current!.kind, searchedBrief || brief) : undefined} />
+        )}
+
+        {result && status !== 'searching' && (
+          <div className="mt-4 space-y-3">
+            <ChipBar filters={result.filters} onChange={refine} disabled={status === 'refining'} />
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted" aria-live="polite">
+                {status === 'refining' ? 'Updating…' : `${result.total} ${result.total === 1 ? 'person matches' : 'people match'} all filters`}
+              </span>
+              {/* Only a search that can return people is worth saving: a re-run uses a search (FR-7.2). */}
+              <Button onClick={save} disabled={!savable || saveState === 'saving' || saveState === 'saved'}>
+                {saveState === 'saved' ? 'Saved' : saveState === 'error' ? 'Try saving again' : 'Save search'}
+              </Button>
+            </div>
+            {status === 'refining' ? <RowSkeletons /> : rows.length > 0 ? (
+              <>
+                <ul className="-mx-4 overflow-hidden border-b border-line md:mx-0 md:rounded-xl md:border">
+                  {rows.map((c) => (
+                    <ResultRow key={c.id} candidate={c} filters={result.filters} selected={openId === c.id} onOpen={() => setOpenId(c.id)} />
+                  ))}
+                </ul>
+                {moreState === 'loading' && <RowSkeletons rows={3} />}
+                {rows.length < result.total && (
+                  <Button onClick={loadMore} disabled={moreState === 'loading'} className="w-full">
+                    {moreState === 'loading' ? 'Loading…' : moreState === 'error' ? 'Try again' : `Show more (${rows.length} of ${result.total})`}
+                  </Button>
+                )}
+              </>
+            ) : <NoResults filters={result.filters} onClear={() => refine({})} />}
+          </div>
+        )}
+      </section>
+      {/* Task 16 renders the profile panel here when openId is set. */}
+    </div>
+  );
 }

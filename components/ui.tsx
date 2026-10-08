@@ -1,4 +1,5 @@
-import type { ComponentProps } from 'react';
+'use client';
+import { useState, type ComponentProps } from 'react';
 
 export const cx = (...classes: (string | false | null | undefined)[]) => classes.filter(Boolean).join(' ');
 
@@ -23,4 +24,17 @@ export function Button({ variant = 'secondary', className, ...props }: Component
 
 export function Skeleton({ className }: { className?: string }) {
   return <span aria-hidden className={cx('skeleton block', className)} />;
+}
+
+/**
+ * A person's photo, or their initials if the photo can't load. The image host (rotto.com) sometimes refuses
+ * many photos at once (HTTP 429); initials beat an empty grey circle.
+ */
+export function Avatar({ src, name, className }: { src: string; name: string; className: string }) {
+  const [failed, setFailed] = useState(false);
+  const initials = name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
+  if (failed) {
+    return <span aria-hidden className={cx('grid shrink-0 place-items-center rounded-full bg-accent-soft text-xs font-semibold text-accent', className)}>{initials}</span>;
+  }
+  return <img src={src} alt="" loading="lazy" onError={() => setFailed(true)} className={cx('shrink-0 rounded-full bg-line', className)} />;
 }

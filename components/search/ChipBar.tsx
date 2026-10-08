@@ -4,7 +4,7 @@ import { Plus, X } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { CHIP_LABELS, type Filters, type ListKey } from '@/lib/shared/filters';
 import { Button, cx } from '@/components/ui';
-import { chipsOf, display, optionsFor, removeChip, replaceValue, setScalar, type Chip } from './chip-model';
+import { chipsOf, display, optionsFor, removeChip, replaceGroup, replaceValue, setScalar, type Chip } from './chip-model';
 
 type Props = { filters: Filters; onChange: (filters: Filters) => void; disabled?: boolean };
 
@@ -59,7 +59,9 @@ function ChipView({ chip, filters, onChange, disabled }: { chip: Chip } & Props)
         </Popover.Trigger>
         <Popover.Portal>
           <Popover.Content sideOffset={6} align="start" className={POPOVER}>
-            {chip.kind === 'list' ? (
+            {chip.kind === 'group' ? (
+              <OptionPicker listKey="roles" onPick={(v) => { setOpen(false); onChange(replaceGroup(filters, v)); }} />
+            ) : chip.kind === 'list' ? (
               <OptionPicker listKey={chip.key} selected={chip.value}
                 onPick={(v) => { setOpen(false); onChange(replaceValue(filters, chip.key, chip.value, v)); }} />
             ) : chip.key === 'min_years' || chip.key === 'max_years' ? (
