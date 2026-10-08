@@ -8,6 +8,8 @@
 
 **Tech stack:** Node 24 · Next.js 16 · React 19 · TypeScript · Supabase CLI 2.119.0 (pinned npm devDependency) · `@supabase/supabase-js` 2 · zod · Tailwind v4 · Radix primitives · Phosphor icons · Vitest · OpenAI Chat Completions over `fetch` (no SDK).
 
+**Plain-language guide:** [EXPLAINED.md](EXPLAINED.md) (every function, what it does and why, plus open questions).
+
 **Spec:** [ARCHITECTURE.md](../ARCHITECTURE.md) (approved), [SPEC.md](../SPEC.md), [TECH_REQUIREMENTS.md](../TECH_REQUIREMENTS.md), [DESIGN.md](../DESIGN.md), [SCORING.md](../SCORING.md), decisions in [NOTES.md](../NOTES.md).
 
 ## Phases
