@@ -1,0 +1,36 @@
+{
+  "name": "rotto-recruiter",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "db:setup": "(supabase start || supabase status) && supabase db reset && node scripts/setup-data.mjs",
+    "dev": "node scripts/dev.mjs",
+    "build": "node scripts/with-env.mjs next build",
+    "test": "node scripts/with-env.mjs vitest run",
+    "test:unit": "vitest run tests/unit"
+  },
+  "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
+    "@radix-ui/react-dialog": "^1.2.0",
+    "@radix-ui/react-popover": "^1.2.0",
+    "@supabase/supabase-js": "^2.117.3",
+    "next": "^16.4.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "server-only": "^0.0.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^24.19.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "supabase": "2.119.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.3"
+  }
+}
