@@ -1,5 +1,7 @@
 # Architecture
 
+**Status:** APPROVED 2026-10-07.
+
 How the app is built: the layers, the data, every request flow, setup and testing. It consolidates the six design sections agreed on 2026-10-07. The reasons behind each choice are in [NOTES.md](NOTES.md), the requirements in [SPEC.md](SPEC.md) and [TECH_REQUIREMENTS.md](TECH_REQUIREMENTS.md), the UI in [DESIGN.md](DESIGN.md), and what earns points in [SCORING.md](SCORING.md).
 
 ## 1. Overview

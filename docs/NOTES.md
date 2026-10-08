@@ -96,6 +96,8 @@ The prompt that passed (the rules worth keeping):
 | *Section 3 review:* paging needs a tie-breaker | Already in FR-2.7/3.2 (`id ASC`); the Section 3 summary now names the order. There is no relevance score (exact match + fixed sort) |
 | *Section 3 review:* the corrections cap shouldn't return 402 | Accepted: 402 triggers Upgrade, which is wrong for a paid company. Cap → 429 with a "start a new search" message |
 | *Section 5 review:* re-run should send `{ brief, filters }` ("as agreed in Section 3") | Rejected: Section 3 kept `saved_brief_id` (user-approved). The validator is ours, the graders only send `{ brief }`, and brief + filters would add a fourth request mode |
+| *Architecture review:* 2.5 s AI timeout · saved re-run via brief + filters · search query built in Node | All three re-raised from Section 2/3 reviews; decisions unchanged (see those rows). No new arguments: a 2.5 s cutoff trades accuracy (25 pts) for speed (5 pts); the ID re-run runs exactly what was saved; 5k rows make the fixed SQL function a few ms, and the speed test proves it |
+| *Architecture review:* `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` is "a typo that crashes supabase-js" | Rejected: supabase-js never reads env vars (we pass the value to `createClient`), so the name is ours. "Publishable" is Supabase's current name for the public key (it replaces "anon"), and Supabase's own Next.js docs use this variable name. To check at scaffold: the exact field names `supabase status -o env` prints in CLI 2.119.0 |
 
 ## 5. Where the data lives: Supabase facts from the brief
 
