@@ -146,6 +146,29 @@ The Supabase library labels query results as "might be missing", even when the q
 
 ---
 
+## 15. Landing page stuttered and the fans ran on the laptop screen (not on the second screen or phone)
+
+**What you saw:** the landing page stuttered even without typing, and the fans got loud, but only on the laptop's own screen.
+
+**Cause:**
+- The laptop screen is 2880×1800 at 200% scaling, refreshing 90 times a second. That is about 4× the pixels per second of a 1080p 60 Hz monitor.
+- Each of the five landing rings had a faint `blur(.5px)`. On a 3D-tilted layer the browser re-applies that blur to every ring on every frame, even when the rings are paused.
+- At that screen size this kept the GPU at 96% (Brave's graphics process). Every CPU process was nearly idle; the test suite was not running.
+
+**How it was checked:** GPU load was read from Windows' performance counters with the page at the real screen size, switching one effect off at a time:
+- rings off → 8%;
+- halo, glow, dots, mask or typing placeholder off → no real change;
+- **blur off → 9%**, the same as no rings;
+- pausing the rings without removing the blur → no change.
+
+**Fix:** removed that one line from `.hero-ring` in `app/globals.css`. GPU load is now:
+- 5–8% at the laptop's size (was 37–51% in the test window);
+- 3–4% at MacBook Pro 16" size (was 29%).
+
+Light and dark screenshots look the same as before. MacBooks (2× screens, up to 120 Hz) would have hit the same problem.
+
+---
+
 ## Smaller changes from the plan, all recorded in the progress log
 
 - TypeScript 5 rather than the brand-new version 7, because Next.js 16's build uses TypeScript 5.

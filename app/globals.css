@@ -74,7 +74,6 @@
     background: conic-gradient(from var(--from), transparent 0deg, color-mix(in oklab, var(--ink) 6%, transparent) 150deg,
       color-mix(in oklab, var(--ink) 60%, transparent) 290deg, transparent 296deg);
     mask-image: radial-gradient(closest-side, transparent calc(100% - 4px), #000 calc(100% - 2.5px), transparent 100%);
-    filter: blur(.5px);
     animation: hero-ring var(--t) linear infinite;
     --tilt: rotateX(76deg);
   }
