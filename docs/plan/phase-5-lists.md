@@ -1,5 +1,8 @@
 # Phase 5: Shortlists, saved searches, people
 
+> **In short:** Adds the shortlist, saved-search and candidate-profile routes on top of the same database security rules.
+> Every route is also attacked from the other company's account and must answer 404 while leaving the other company's data untouched.
+
 Goal: the rest of the contract, plus our additive routes, each tested from the attacker's side as well. Covers the security 10 (via the API) and the "obvious how to shortlist / save" UI checks.
 
 ---
@@ -64,14 +67,22 @@ describe('shortlists (contract)', () => {
     expect((await api(acme, 'POST', '/api/shortlists', { name: 'Globex list' })).status).toBe(200); // names are per company
     expect((await api(acme, 'PATCH', `/api/shortlists/${id}`, { name: 'Renamed' })).status).toBe(200);
     expect((await api(acme, 'GET', `/api/shortlists/${id}`)).body.name).toBe('Renamed');
+    expect((await api(acme, 'PATCH', `/api/shortlists/${id}`, { name: 'Globex list' })).status).toBe(409); // rename onto a taken name
+    expect((await api(acme, 'PATCH', `/api/shortlists/${id}`, { name: ' ' })).status).toBe(400);
+    expect((await api(acme, 'PATCH', '/api/shortlists/not-a-uuid', { name: 'x' })).status).toBe(400);
+    expect((await api(acme, 'DELETE', '/api/shortlists/not-a-uuid')).status).toBe(400);
+    await api(acme, 'POST', `/api/shortlists/${id}/people/cand_0001`);
     expect((await api(acme, 'DELETE', `/api/shortlists/${id}`)).status).toBe(200);
     expect((await api(acme, 'GET', `/api/shortlists/${id}`)).status).toBe(404);
+    // Deleting a list removes its members too (FR-6.6).
+    expect((await admin().from('shortlist_members').select('candidate_id').eq('shortlist_id', id)).data).toEqual([]);
   });
 
   it('unknown candidate 404, malformed IDs 400, no token 401', async () => {
     const { id } = (await api(acme, 'POST', '/api/shortlists', { name: 'B' })).body;
     expect((await api(acme, 'POST', `/api/shortlists/${id}/people/cand_9999`)).status).toBe(404);
     expect((await api(acme, 'POST', `/api/shortlists/${id}/people/robert'); drop table--`)).status).toBe(400);
+    expect((await api(acme, 'POST', `/api/shortlists/${id}/people/%25`)).status).toBe(400); // odd encoding: 400, never a crash
     expect((await api(acme, 'GET', '/api/shortlists/not-a-uuid')).status).toBe(400);
     expect((await api(null, 'GET', '/api/shortlists')).status).toBe(401);
   });
@@ -105,8 +116,9 @@ import type { Ctx } from './auth';
 import { HttpError, must, requireUuid } from './http';
 import type { CandidateCard } from './search';
 
-const CARD = 'id, full_name, avatar_url, current_title, current_company, city, years_experience, open_to_work, skills';
+const CARD = 'id, full_name, avatar_url, headline, current_title, current_company, city, years_experience, open_to_work, skills';
 const UNIQUE_VIOLATION = '23505';
+const FK_VIOLATION = '23503';
 
 export function requireCandidateId(id: string) {
   if (!/^cand_\d{4}$/.test(id)) throw new HttpError(400, 'That candidate ID is not valid.');
@@ -174,10 +186,12 @@ export async function addMember(ctx: Ctx, listId: string, personId: string) {
   await requireOwnList(ctx, listId);
   const person = must(await ctx.db.from('candidates').select('id').eq('id', personId).maybeSingle());
   if (!person) throw new HttpError(404, 'That candidate was not found.');
-  must(await ctx.db.from('shortlist_members').upsert(
+  const { error } = await ctx.db.from('shortlist_members').upsert(
     { shortlist_id: listId, company_id: ctx.companyId, candidate_id: personId },
     { onConflict: 'shortlist_id,candidate_id', ignoreDuplicates: true },
-  ));
+  );
+  if (error?.code === FK_VIOLATION) throw new HttpError(404, 'That list was not found.'); // deleted a moment ago
+  if (error) throw new Error(error.message);
   return { ok: true as const };
 }
 
@@ -233,12 +247,12 @@ type P = { id: string; personId: string };
 
 export const POST = route<P>(async (req, { params }) => {
   const { id, personId } = await params;
-  return json(await addMember(await requireRecruiter(req), id, decodeURIComponent(personId)));
+  return json(await addMember(await requireRecruiter(req), id, personId));
 });
 
 export const DELETE = route<P>(async (req, { params }) => {
   const { id, personId } = await params;
-  return json(await removeMember(await requireRecruiter(req), id, decodeURIComponent(personId)));
+  return json(await removeMember(await requireRecruiter(req), id, personId));
 });
 ```
 
@@ -299,6 +313,8 @@ describe('saved searches', () => {
     expect((await api(acme, 'POST', '/api/saved-briefs', { brief: 'x' })).status).toBe(400);
     expect(JSON.stringify((await api(acme, 'GET', '/api/saved-briefs')).body)).not.toContain(globexSaved);
     expect((await api(acme, 'DELETE', `/api/saved-briefs/${globexSaved}`)).status).toBe(404);
+    expect((await api(acme, 'DELETE', '/api/saved-briefs/not-a-uuid')).status).toBe(400);
+    expect((await api(null, 'GET', '/api/saved-briefs')).status).toBe(401);
     expect((await admin().from('saved_briefs').select('id').eq('id', globexSaved)).data).toHaveLength(1);
     const { id } = (await api(acme, 'POST', '/api/saved-briefs', { brief: 'x', filters: { roles: ['Recruiter'] } })).body;
     expect((await api(acme, 'DELETE', `/api/saved-briefs/${id}`)).status).toBe(200);
@@ -315,6 +331,7 @@ describe('GET /api/people/{id}', () => {
     expect(r.body.skills).toContain('React');
     expect((await api(acme, 'GET', '/api/people/cand_9999')).status).toBe(404);
     expect((await api(acme, 'GET', '/api/people/1%20or%201=1')).status).toBe(400);
+    expect((await api(acme, 'GET', '/api/people/%25')).status).toBe(400);
     expect((await api(null, 'GET', '/api/people/cand_1634')).status).toBe(401);
   });
 });
@@ -338,7 +355,7 @@ export async function createSaved(ctx: Ctx, body: Record<string, unknown>) {
   const brief = typeof body.brief === 'string' ? body.brief.trim() : '';
   if (brief.length < 1 || brief.length > 500) throw new HttpError(400, 'A saved search needs a brief of 1 to 500 characters.');
   const clean = cleanFilters(body.filters);
-  if (!clean) throw new HttpError(400, 'Those filters are not valid.');
+  if (!clean) throw new HttpError(400, 'The filters must be a JSON object.'); // contract: filters is any object
   const row = must(await ctx.db.from('saved_briefs').insert({ company_id: ctx.companyId, brief, filters: clean.filters }).select('id').single());
   return { id: row.id as string };
 }
@@ -392,7 +409,7 @@ import { json, route } from '@/lib/server/http';
 import { getPerson } from '@/lib/server/lists';
 
 export const GET = route<{ id: string }>(async (req, { params }) =>
-  json(await getPerson(await requireRecruiter(req), decodeURIComponent((await params).id))));
+  json(await getPerson(await requireRecruiter(req), (await params).id)));
 ```
 
 - [ ] **Step 5: Run the tests, then the whole suite**
@@ -409,3 +426,23 @@ Expected: PASS. The full suite is now the API's safety net for the UI phase.
 git add lib/server/lists.ts app/api/saved-briefs app/api/people tests/saved-people-api.test.ts
 git commit -m "feat: saved searches and candidate profile routes"
 ```
+
+---
+
+## Requirements check (plan review, 2026-10-07)
+
+An independent reviewer checked this phase against TECH_REQUIREMENTS, SCORING, SPEC, ARCHITECTURE and DESIGN. I verified each finding against those docs before accepting or rejecting it.
+
+| Requirement | Where in this phase | Proof |
+|---|---|---|
+| TECH §3 / §3a: shortlist, saved-brief and people routes with exact shapes | Tasks 11–12 | `tests/shortlists-api.test.ts`, `tests/saved-people-api.test.ts` |
+| X1 through the API: the other company's lists and saved searches → 404, unchanged | RLS + `requireOwnList` | cross-company tests read globex's data back afterwards |
+| FR-5.2: malformed id → 400, unknown → 404 | `requireCandidateId`, `requireUuid` | includes `%25`, SQL-ish ids, bad UUIDs |
+| FR-6.5 / FR-6.6: duplicates 409, idempotent add, delete removes members | upsert + unique constraints + cascade | rename-to-taken-name 409, cascade check |
+| F3 / FR-5.1: profile shows experience, education, skills | `getPerson` returns the original record | people test |
+
+**Changed after review:** removed a second URL-decode that turned `/api/people/%25` into a 500 (now 400); a list deleted mid-add gives 404, not 500; added tests for rename 409/400, bad UUIDs on PATCH/DELETE, the member cascade, and 401 on saved searches.
+
+**Rejected:** a 400 when saving a search that can't return anyone. The contract says `filters` is any object, so a grader's odd filters must still save. The UI disables "Save search" for such searches instead.
+
+**Verdict:** ready to implement.

@@ -1,5 +1,8 @@
 # Phase 1: The gate
 
+> **In short:** Sets up the project so a fresh machine goes from clone to running app with two commands (`make setup`, `make dev`), with all 5,000 candidates and both test logins.
+> It scores nothing by itself, but if it fails the grader can score nothing else, so GitHub re-checks it on a clean machine after every push.
+
 Goal: a clean clone → `make setup` → `make dev` serves the app on :3000 with all 5,000 candidates and both logins, and CI proves it on every push. Worth 0 points, but it blocks all 100.
 
 **Prerequisites (the user's machine):** Node 24 (`node -v` → `v24.x`), Docker Desktop **running** (`docker info` succeeds), and `make` if available (otherwise use the npm scripts).
@@ -38,6 +41,7 @@ Goal: a clean clone → `make setup` → `make dev` serves the app on :3000 with
 - [ ] **Step 2: Install dependencies (exact versions recorded in the lockfile)**
 
 ```bash
+# Git Bash (PowerShell would write .nvmrc as UTF-16)
 echo 24 > .nvmrc
 npm install next@16 react@19 react-dom@19 @supabase/supabase-js@2 zod@4 server-only @phosphor-icons/react @radix-ui/react-dialog @radix-ui/react-popover
 npm install -D --save-exact supabase@2.119.0
@@ -60,15 +64,16 @@ Expected: `npx supabase --version` prints `2.119.0`.
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     "incremental": true,
     "plugins": [{ "name": "next" }],
     "paths": { "@/*": ["./*"] }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", ".next/dev/types/**/*.ts"],
   "exclude": ["node_modules", "docs"]
 }
 ```
+These are the values Next 16 writes itself on the first build; starting with them keeps the tree clean after `make dev` on the grader's machine.
 
 - [ ] **Step 4: Write `next.config.ts`, `postcss.config.mjs`, `vitest.config.ts`, the stub**
 
@@ -76,10 +81,8 @@ Expected: `npx supabase --version` prints `2.119.0`.
 ```ts
 import type { NextConfig } from 'next';
 
-const nextConfig: NextConfig = {
-  // Photos and logos are loaded by the browser with plain <img>; the image host blocks server fetches.
-  images: { unoptimized: true },
-};
+// Empty on purpose: photos and logos use plain <img> (the image host blocks server fetches), so no image config.
+const nextConfig: NextConfig = {};
 
 export default nextConfig;
 ```
@@ -196,14 +199,25 @@ git commit -m "chore: scaffold Next.js 16 app, tooling and Makefile"
   - tables (RLS added in Task 4): `candidates`, `companies`, `recruiters`, `searches`, `shortlists`, `shortlist_members`, `saved_briefs`, `subscriptions`, `billing_events`
   - company IDs: acme `a0000000-0000-4000-8000-000000000001`, globex `b0000000-0000-4000-8000-000000000002`
   - generated `lib/shared/vocab.ts` exporting `VOCAB` and `CITY_STATES`
-  - test helpers: `BASE`, `COMPANY`, `admin()`, `signIn(slug)`, `asUser(token)`, `api(token, method, path, body?)`
+  - test helpers: `BASE`, `COMPANY`, `admin()`, `signIn(slug)`, `asUser(token)`, `api(token, method, path, body?)`, `resetCompany(slug)`
 
 - [ ] **Step 1: Initialise Supabase (one time; answer "n" to editor prompts)**
 
 ```bash
 echo n | npx supabase init
 ```
-Expected: `supabase/config.toml` exists. Leave defaults (`[db.seed] enabled = true`, `sql_paths = ["./seed.sql"]`).
+Expected: `supabase/config.toml` exists. Keep `[db.seed] enabled = true`, `sql_paths = ["./seed.sql"]` and the default ports.
+
+Then turn off every service we don't use, so a clean Mac pulls fewer images and has fewer ways to fail. `analytics` in particular needs Docker's default socket, which recent Docker Desktop for Mac leaves off. In `supabase/config.toml` set `enabled = false` under each of:
+```toml
+[analytics]
+[studio]
+[inbucket]
+[storage]
+[realtime]
+[edge_runtime]
+```
+Leave `[api]`, `[db]` and `[auth]` on (PostgREST, Postgres, sign-in).
 
 - [ ] **Step 2: Write the schema migration `supabase/migrations/20261008000000_schema.sql`**
 
@@ -325,13 +339,19 @@ insert into public.companies (id, slug, name) values
 import { execSync } from 'node:child_process';
 
 export function supabaseEnv() {
-  const out = execSync('npx supabase status -o json', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-  const s = JSON.parse(out.slice(out.indexOf('{')));
+  const notRunning = new Error('Supabase is not running. Run `make setup` first.');
+  let s;
+  try {
+    const out = execSync('npx supabase status -o json', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    s = JSON.parse(out.slice(out.indexOf('{')));
+  } catch {
+    throw notRunning;
+  }
   const url = s.API_URL;
-  // CLI 2.x prints the new key names; older output used ANON_KEY / SERVICE_ROLE_KEY. Accept either.
-  const publishable = s.PUBLISHABLE_KEY ?? s.ANON_KEY;
-  const secret = s.SECRET_KEY ?? s.SERVICE_ROLE_KEY;
-  if (!url || !publishable || !secret) throw new Error('Supabase is not running. Run `make setup` first.');
+  // Prefer the JWT keys (accepted by every Supabase API, including the auth admin API); fall back to the new key names.
+  const publishable = s.ANON_KEY ?? s.PUBLISHABLE_KEY;
+  const secret = s.SERVICE_ROLE_KEY ?? s.SECRET_KEY;
+  if (!url || !publishable || !secret) throw notRunning;
   return {
     SUPABASE_URL: url,
     SUPABASE_SECRET_KEY: secret,
@@ -349,7 +369,9 @@ export function supabaseEnv() {
 import { spawn } from 'node:child_process';
 import { supabaseEnv } from './supabase-env.mjs';
 
-const child = spawn(process.argv.slice(2).join(' '), {
+// Quote arguments with spaces so `npm test -- -t "loaded all"` survives the shell (sh on Mac/Linux, cmd on Windows).
+const cmd = process.argv.slice(2).map((a) => (/[\s"]/.test(a) ? JSON.stringify(a) : a)).join(' ');
+const child = spawn(cmd, {
   stdio: 'inherit',
   shell: true,
   env: { ...process.env, ...supabaseEnv() },
@@ -549,7 +571,7 @@ npm run db:setup          # or: make setup
 npm run dev               # second terminal; or: make dev
 npm test -- tests/gate.test.ts
 ```
-Expected: `Setup complete: 5000 candidates, 2 recruiters, vocab written.` and 3 tests PASS. Run `npm run db:setup` a **second time** and re-run the test: it must still pass (setup is idempotent).
+Expected: `Setup complete: 5000 candidates, 2 recruiters, vocab written.` and 3 tests PASS. Run `npm run db:setup` a **second time** and re-run the test: it must still pass (setup is idempotent). Also check the keys: the passing sign-in test proves the publishable key works, and `Setup complete` proves the secret key works with the auth admin API.
 
 - [ ] **Step 11: Commit**
 
@@ -590,6 +612,10 @@ jobs:
           node-version: 24
       - name: make setup (no .env, no manual steps)
         run: make setup
+      - name: make setup again (must be re-runnable)
+        run: make setup
+      - name: no .env file was needed or created
+        run: test -z "$(git ls-files --others --ignored --exclude-standard | grep -E '(^|/)\.env')"
       - name: make dev
         run: |
           (make dev > dev.log 2>&1 &)
@@ -597,6 +623,9 @@ jobs:
           cat dev.log; exit 1
       - name: make test
         run: make test
+      - name: show the server log on failure
+        if: failure()
+        run: cat dev.log
 ```
 
 - [ ] **Step 2: Add the repository secret (user, one time)**
@@ -612,3 +641,24 @@ git push
 gh run watch
 ```
 Expected: the `clean-machine` run succeeds (the gate test passes on a fresh Ubuntu machine).
+
+---
+
+## Requirements check (plan review, 2026-10-07)
+
+An independent reviewer checked this phase against TECH_REQUIREMENTS, SCORING, SPEC, ARCHITECTURE and DESIGN. I verified each finding against those docs before accepting or rejecting it.
+
+| Requirement | Where in this phase | Proof |
+|---|---|---|
+| S1–S5: `make setup` / `make dev`, pinned CLI 2.119.0, Node 24 | Tasks 1–2 | `tests/gate.test.ts`; CI `setup-and-test` job |
+| S6: no `.env` file | `scripts/supabase-env.mjs` reads `supabase status` | CI step "no .env file"; Task 19 Step 5 |
+| S7: boots without the grader's keys | (owned by Task 10) | `tests/no-keys.test.ts` in the CI `no-keys` job |
+| S8: data files committed and loaded | `scripts/setup-data.mjs` | loader stops unless the count is 5,000; gate test |
+| OPS-2: setup can be run twice | `(supabase start \|\| supabase status)` | CI runs `make setup` twice |
+| T6: runs on a clean Mac | unused Supabase services off (analytics needs a Docker setting Macs often lack) | friend's Mac run (Task 19), else an accepted risk in NOTES |
+
+**Changed after review:** turned off analytics, studio, inbucket, storage, realtime and edge runtime; prefer the JWT keys (known to work with the auth admin API) and say how Step 10 proves both keys; a friendly error when Supabase isn't running; argument quoting in `with-env.mjs`; tsconfig values Next 16 expects (no surprise file changes on the grader's machine); removed the unused image setting; CI runs setup twice, checks for `.env`, prints the server log on failure; `.nvmrc` note for PowerShell.
+
+**Rejected:** non-default Supabase ports. The grader runs one submission's stack at a time, and changing the ports would ripple through every URL in the docs and tests for little gain.
+
+**Verdict:** ready to implement.

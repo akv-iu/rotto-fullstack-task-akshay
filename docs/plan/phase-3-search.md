@@ -1,5 +1,8 @@
 # Phase 3: Search
 
+> **In short:** Turns a plain-English brief into filters with one AI call, checks every value against the real data, then runs the fixed SQL search. Editing a chip or paging never calls the AI or uses a search.
+> Proven against the sample queries (exact matches), hostile briefs (always 0 results), 20 simultaneous searches (exactly 1 succeeds) and the speed targets.
+
 Goal: brief → one AI call → cleaned filters → the fixed SQL search, plus corrections, saved re-runs, paging and the plan, all behind the exact API contract. Proven by the sample queries, the race test and the speed test. This is worth the 25 accuracy points, plus 5 for the free limit and 5 for speed.
 
 ---
@@ -15,7 +18,7 @@ Goal: brief → one AI call → cleaned filters → the fixed SQL search, plus c
 - Produces:
   - `type Filters`, `type Unsupported = { text: string; reason: 'unsupported' | 'unclear' }`
   - `LIST_KEYS: Record<ListKey, VocabKey>` (which vocabulary each list filter uses)
-  - `cleanFilters(input: unknown): { filters: Filters; runnable: boolean } | null` (null = wrong shape → the caller returns 400)
+  - `cleanFilters(input: unknown): { filters: Filters; runnable: boolean } | null` (null only when the input is not a JSON object → the caller returns 400; anything else it cannot use becomes an `unsupported` chip, SPEC FR-2.3)
   - `CHIP_LABELS: Record<keyof Filters, string>` (used by the UI)
   - `MAX_YEARS = 15`
 
@@ -58,13 +61,25 @@ describe('cleanFilters', () => {
     });
   });
 
-  it('rejects the wrong shape (unknown keys, wrong types, SQL-ish junk)', () => {
+  it('returns null only when the input is not an object', () => {
     expect(cleanFilters(null)).toBeNull();
     expect(cleanFilters([])).toBeNull();
     expect(cleanFilters('roles')).toBeNull();
-    expect(cleanFilters({ roles: 'Data Scientist' })).toBeNull();
-    expect(cleanFilters({ min_years: '5' })).toBeNull();
-    expect(cleanFilters({ "1=1; drop table candidates": true })).toBeNull();
+  });
+
+  it('moves unknown keys and wrong types to unsupported (FR-2.3), so they return nobody', () => {
+    expect(cleanFilters({ location: 'NYC' })).toEqual({ filters: { unsupported: [{ text: 'location: NYC', reason: 'unsupported' }] }, runnable: false });
+    expect(cleanFilters({ roles: 'Data Scientist' })!.runnable).toBe(false);
+    expect(cleanFilters({ min_years: '5' })!.runnable).toBe(false);
+    expect(cleanFilters({ "1=1; drop table candidates": true })!.runnable).toBe(false);
+  });
+
+  it('never fails on odd model output: clamps years, trims and caps unsupported, dedupes', () => {
+    expect(cleanFilters({ roles: ['Recruiter'], min_years: 40, max_years: -2 })!.filters).toEqual({ roles: ['Recruiter'], min_years: 15, max_years: 0 });
+    const many = cleanFilters({ unsupported: Array.from({ length: 30 }, (_, i) => ({ text: `x${i}`.padEnd(200, 'y'), reason: 'unsupported' })) })!;
+    expect(many.filters.unsupported).toHaveLength(20);
+    expect(many.filters.unsupported![0].text).toHaveLength(120);
+    expect(cleanFilters({ cities: ['London', 'London'], unsupported: [{ text: '  ', reason: 'unclear' }] })!.filters.unsupported).toEqual([{ text: 'London', reason: 'unsupported' }]);
   });
 });
 ```
@@ -137,51 +152,62 @@ export const CHIP_LABELS: Record<Exclude<keyof Filters, 'unsupported'>, string> 
   current_company_type: 'Currently at a',
 };
 
-const list = z.array(z.string().max(120)).max(50).nullish();
-const companyType = z.enum(['startup', 'enterprise']).nullish();
+const MAX_TEXT = 120;
+const MAX_UNSUPPORTED = 20;
+const list = z.array(z.string());
+const years = z.number().finite();
+const companyType = z.enum(['startup', 'enterprise']);
+const unsupportedList = z.array(z.union([z.string(), z.object({ text: z.string(), reason: z.string().optional() })]));
 
-// Shape check only; each value is checked against the data's allowed values below.
-const inputSchema = z
-  .object({
-    roles: list, seniorities: list, cities: list, skills: list, any_skills: list,
-    companies: list, current_companies: list, degrees: list, fields: list, schools: list,
-    min_years: z.number().int().min(0).max(100).nullish(),
-    max_years: z.number().int().min(0).max(100).nullish(),
-    open_to_work: z.boolean().nullish(),
-    worked_at_company_type: companyType,
-    current_company_type: companyType,
-    unsupported: z
-      .array(z.object({ text: z.string().trim().min(1).max(120), reason: z.enum(['unsupported', 'unclear']) }))
-      .max(20)
-      .nullish(),
-  })
-  .strict();
+const show = (key: string, value: unknown) => `${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`;
 
 /**
  * The single gate every filter object passes through, whether it came from the AI, the browser or the database.
- * Returns null for the wrong shape. Never returns a "match everyone" filter as runnable.
+ * Returns null only for a non-object. Anything it cannot use becomes an `unsupported` chip (never applied, never dropped
+ * silently), so odd model output gives "nobody" with a reason instead of a failed search. Never returns "everyone" as runnable.
  */
 export function cleanFilters(input: unknown): { filters: Filters; runnable: boolean } | null {
-  const parsed = inputSchema.safeParse(input);
-  if (!parsed.success) return null;
-  const src = parsed.data;
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
   const filters: Filters = {};
-  const unsupported: Unsupported[] = [...(src.unsupported ?? [])];
+  const unsupported: Unsupported[] = [];
+  const reject = (text: string, reason: Unsupported['reason'] = 'unsupported') => {
+    const t = text.trim().slice(0, MAX_TEXT);
+    if (t && !unsupported.some((u) => u.text === t)) unsupported.push({ text: t, reason });
+  };
 
-  for (const key of Object.keys(LIST_KEYS) as ListKey[]) {
-    const values = src[key];
-    if (!values?.length) continue;
-    const allowed = VOCAB[LIST_KEYS[key]] as readonly string[];
-    const kept = [...new Set(values.filter((v) => allowed.includes(v)))];
-    for (const v of values) if (!allowed.includes(v)) unsupported.push({ text: v, reason: 'unsupported' });
-    if (kept.length) filters[key] = kept;
+  for (const [key, value] of Object.entries(input)) {
+    if (value === null || value === undefined) continue;
+    if (key in LIST_KEYS) {
+      const values = list.safeParse(value);
+      if (!values.success) { reject(show(key, value)); continue; }
+      const allowed = VOCAB[LIST_KEYS[key as ListKey]] as readonly string[];
+      const kept = [...new Set(values.data.filter((v) => allowed.includes(v)))];
+      for (const v of values.data) if (!allowed.includes(v)) reject(v);
+      if (kept.length) filters[key as ListKey] = kept;
+    } else if (key === 'min_years' || key === 'max_years') {
+      const n = years.safeParse(value);
+      if (!n.success) { reject(show(key, value)); continue; }
+      const y = Math.min(Math.max(Math.round(n.data), 0), MAX_YEARS);
+      if (key === 'min_years' ? y > 0 : y < MAX_YEARS) filters[key] = y; // 0+ and 15- years mean "anyone": dropped
+    } else if (key === 'open_to_work') {
+      if (typeof value !== 'boolean') reject(show(key, value));
+      else if (value) filters.open_to_work = true;
+    } else if (key === 'worked_at_company_type' || key === 'current_company_type') {
+      const t = companyType.safeParse(value);
+      if (t.success) filters[key] = t.data;
+      else reject(show(key, value));
+    } else if (key === 'unsupported') {
+      const items = unsupportedList.safeParse(value);
+      if (!items.success) { reject(show(key, value)); continue; }
+      for (const u of items.data) {
+        if (typeof u === 'string') reject(u);
+        else reject(u.text, u.reason === 'unclear' ? 'unclear' : 'unsupported');
+      }
+    } else {
+      reject(show(key, value)); // unknown key
+    }
   }
-  if (src.min_years != null && src.min_years > 0) filters.min_years = src.min_years;
-  if (src.max_years != null && src.max_years < MAX_YEARS) filters.max_years = src.max_years;
-  if (src.open_to_work === true) filters.open_to_work = true;
-  if (src.worked_at_company_type) filters.worked_at_company_type = src.worked_at_company_type;
-  if (src.current_company_type) filters.current_company_type = src.current_company_type;
-  if (unsupported.length) filters.unsupported = unsupported;
+  if (unsupported.length) filters.unsupported = unsupported.slice(0, MAX_UNSUPPORTED);
 
   const hasCondition = Object.keys(filters).some((k) => k !== 'unsupported');
   return { filters, runnable: hasCondition && unsupported.length === 0 };
@@ -191,7 +217,7 @@ export function cleanFilters(input: unknown): { filters: Filters; runnable: bool
 - [ ] **Step 4: Run the tests**
 
 Run: `npm run test:unit -- tests/unit/filters.test.ts`
-Expected: PASS (6 tests).
+Expected: PASS (8 tests).
 
 - [ ] **Step 5: Commit**
 
@@ -320,6 +346,7 @@ Rules:
 - Use null for every field the brief does not clearly ask for. Never add criteria the brief does not state.
 - Use only the allowed enum values. Map typos, nicknames and plurals to the exact value (e.g. "Pyhton" -> "Python", "k8s" -> "Kubernetes", "golang" -> "Go", "PostgreSQL" -> "Postgres", "NYC"/"Manhattan" -> "New York", "SF"/"Bay Area" -> "San Francisco", "LA" -> "Los Angeles", "Stanford" -> "Stanford University", "ML engineers" -> "Machine Learning Engineer", "AEs" -> "Account Executive").
 - roles: only when the brief names a job role. A technology before "engineers"/"developers"/"devs" ("React engineers", "Python developers") is a SKILL, not a role.
+- A phrase that names one of the allowed roles ("machine learning engineers", "data scientists") is always that ROLE, even if part of it is also a skill.
 - "engineers" alone means all engineering roles: ${engineeringRoles.join(', ')}. "designers" means "Product Designer".
 - skills: the candidate must have ALL of them ("knows Go and Kubernetes"). any_skills: the candidate needs AT LEAST ONE ("React or Vue").
 - Skill phrases map to skills (e.g. "enterprise sales experience" -> skills ["Enterprise Sales"]).
@@ -386,6 +413,8 @@ export async function briefToFilters(brief: string): Promise<Record<string, unkn
   if (!res.ok) throw new LlmError(`OpenAI returned ${res.status}`);
 
   const body = await res.json().catch(() => null);
+  // Token counts for the README's cost-per-search figure (Task 19). Counts only, never the brief.
+  if (process.env.LOG_LLM_USAGE) console.info('llm usage', JSON.stringify(body?.usage));
   const message = body?.choices?.[0]?.message;
   if (!message || message.refusal || typeof message.content !== 'string') throw new LlmError('No filters returned');
   let parsed: unknown;
@@ -454,6 +483,8 @@ describe('POST /api/search', () => {
     expect((await api(t, 'POST', '/api/search', { brief: 'x'.repeat(501) })).status).toBe(400);
     expect((await api(t, 'POST', '/api/search', { nothing: true })).status).toBe(400);
     expect((await api(t, 'POST', '/api/search', ['brief'])).status).toBe(400);
+    expect((await api(t, 'POST', '/api/search', { brief: 'x', filters: {} })).status).toBe(400); // two modes at once
+    expect((await api(t, 'POST', '/api/search', { brief: 'x', saved_brief_id: 'y' })).status).toBe(400);
   });
 
   it.runIf(!hasKey)('without OPENAI_API_KEY: 503 and no search used', async () => {
@@ -484,14 +515,17 @@ describe('corrections (no AI, no quota)', () => {
     expect(r.body.searches_remaining).toBe(0); // unchanged: the one search was used by readySearch
   });
 
-  it('rejects bad filters (400), unknown or foreign parents (404), and the 11th correction (429)', async () => {
+  it('rejects non-object filters (400), unknown or foreign parents (404), and the 11th correction (429)', async () => {
     const acme = await signIn('acme');
     const globexSearch = await readySearch(await signIn('globex'), { roles: ['Recruiter'] });
     const parent = await readySearch(acme, { roles: ['Recruiter'] });
-    expect((await api(acme, 'POST', '/api/search', { parent_search_id: parent, filters: { roles: 'Recruiter' } })).status).toBe(400);
+    expect((await api(acme, 'POST', '/api/search', { parent_search_id: parent, filters: 'Recruiter' })).status).toBe(400);
+    const odd = await api(acme, 'POST', '/api/search', { parent_search_id: parent, filters: { roles: 'Recruiter' } });
+    expect(odd.status).toBe(200); // wrong type → unsupported chip, nobody returned (FR-2.3)
+    expect(odd.body.total).toBe(0);
     expect((await api(acme, 'POST', '/api/search', { parent_search_id: globexSearch, filters: { roles: ['Recruiter'] } })).status).toBe(404);
     expect((await api(acme, 'POST', '/api/search', { parent_search_id: 'not-a-uuid', filters: {} })).status).toBe(400);
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 9; i++) { // the odd-type correction above was the 1st of 10
       expect((await api(acme, 'POST', '/api/search', { parent_search_id: parent, filters: { roles: ['Recruiter'] } })).status).toBe(200);
     }
     expect((await api(acme, 'POST', '/api/search', { parent_search_id: parent, filters: { roles: ['Recruiter'] } })).status).toBe(429);
@@ -666,7 +700,7 @@ import { HttpError, must, requireUuid } from './http';
 import { briefToFilters, llmConfigured } from './llm';
 
 export type CandidateCard = {
-  id: string; full_name: string; avatar_url: string; current_title: string; current_company: string;
+  id: string; full_name: string; avatar_url: string; headline: string; current_title: string; current_company: string;
   city: string; years_experience: number; open_to_work: boolean; skills: string[];
 };
 export type SearchResponse = { search_id: string; filters: Filters; total: number; results: CandidateCard[]; searches_remaining: number | null };
@@ -699,9 +733,26 @@ async function reserve(ctx: Ctx, brief: string): Promise<string> {
   return id;
 }
 
-async function complete(ctx: Ctx, id: string, clean: Clean) {
-  const ok = must(await ctx.db.rpc('complete_search', { p_search: id, p_filters: clean.filters }));
-  if (!ok) throw new Error('complete_search did not update the search');
+/**
+ * Runs page 1 and reads the plan BEFORE marking the search done, so every step that can fail happens while the
+ * search is still refundable. complete_search is the last statement: after it, nothing else can fail.
+ */
+async function finish(ctx: Ctx, id: string, clean: Clean): Promise<SearchResponse> {
+  try {
+    const response = await firstPage(ctx, id, clean);
+    const ok = must(await ctx.db.rpc('complete_search', { p_search: id, p_filters: clean.filters }));
+    if (!ok) throw new Error('complete_search did not update the search');
+    return response;
+  } catch (e) {
+    return refund(ctx, id, e);
+  }
+}
+
+async function refund(ctx: Ctx, id: string, cause: unknown): Promise<never> {
+  console.error('search failed, refunding', id, cause);
+  const r = await ctx.db.rpc('refund_search', { p_search: id });
+  if (r.error || r.data !== true) console.error('refund did not apply', id, r.error?.message);
+  throw new HttpError(502, NOT_COUNTED);
 }
 
 /** New search: the only path that calls the AI. Any failure after the reservation refunds it. */
@@ -710,25 +761,21 @@ export async function newSearch(ctx: Ctx, brief: string): Promise<SearchResponse
   if (!text || text.length > 500) throw new HttpError(400, 'Describe who you are looking for in 1 to 500 characters.');
   if (!llmConfigured()) throw new HttpError(503, 'Search is not set up on this server yet.');
   const id = await reserve(ctx, text);
-  let clean: Clean;
+  let clean: Clean | null;
   try {
-    const parsed = cleanFilters(await briefToFilters(text));
-    if (!parsed) throw new Error('model output failed the filter check');
-    clean = parsed;
-    await complete(ctx, id, clean);
+    clean = cleanFilters(await briefToFilters(text));
   } catch (e) {
-    console.error('search failed, refunding', e);
-    await ctx.db.rpc('refund_search', { p_search: id });
-    throw new HttpError(502, NOT_COUNTED);
+    return refund(ctx, id, e);
   }
-  return firstPage(ctx, id, clean);
+  if (!clean) return refund(ctx, id, new Error('model output was not an object'));
+  return finish(ctx, id, clean);
 }
 
 /** Correction: no AI, no quota; capped at 10 per original search. */
 export async function correctSearch(ctx: Ctx, parentId: string, rawFilters: unknown): Promise<SearchResponse> {
   requireUuid(parentId, 'search');
   const clean = cleanFilters(rawFilters);
-  if (!clean) throw new HttpError(400, 'Those filters are not valid.');
+  if (!clean) throw new HttpError(400, 'The filters must be a JSON object.');
   const r = must(await ctx.db.rpc('create_correction', { p_parent: parentId, p_filters: clean.filters })) as { id?: string; error?: string };
   if (r.error === 'not_found') throw new HttpError(404, 'That search was not found.');
   if (r.error === 'cap') throw new HttpError(429, "You've refined this search 10 times. Start a new search to keep going.");
@@ -741,15 +788,7 @@ export async function rerunSaved(ctx: Ctx, savedId: string): Promise<SearchRespo
   const saved = must(await ctx.db.from('saved_briefs').select('brief, filters').eq('id', savedId).maybeSingle());
   if (!saved) throw new HttpError(404, 'That saved search was not found.');
   const clean = cleanFilters(saved.filters) ?? { filters: {}, runnable: false };
-  const id = await reserve(ctx, saved.brief);
-  try {
-    await complete(ctx, id, clean);
-  } catch (e) {
-    console.error('re-run failed, refunding', e);
-    await ctx.db.rpc('refund_search', { p_search: id });
-    throw new HttpError(502, NOT_COUNTED);
-  }
-  return firstPage(ctx, id, clean);
+  return finish(ctx, await reserve(ctx, saved.brief), clean);
 }
 
 /** Paging: never counts as a search; stored filters are re-checked on every read. */
@@ -773,14 +812,16 @@ import { HttpError, json, readJson, route } from '@/lib/server/http';
 import { correctSearch, newSearch, rerunSaved } from '@/lib/server/search';
 
 // Contract: { brief }. Extensions (TECH §3a): { parent_search_id, filters } = correction; { saved_brief_id } = re-run.
+// Exactly one mode; any other mix of these four fields is a 400 (SPEC FR-2.8).
+const MODE_FIELDS = ['brief', 'filters', 'parent_search_id', 'saved_brief_id'];
+
 export const POST = route(async (req) => {
   const ctx = await requireRecruiter(req);
   const body = await readJson(req);
-  const isCorrection = 'parent_search_id' in body;
-  const isRerun = 'saved_brief_id' in body;
-  if (isCorrection && !isRerun && typeof body.parent_search_id === 'string') return json(await correctSearch(ctx, body.parent_search_id, body.filters));
-  if (isRerun && !isCorrection && typeof body.saved_brief_id === 'string') return json(await rerunSaved(ctx, body.saved_brief_id));
-  if (!isCorrection && !isRerun && typeof body.brief === 'string') return json(await newSearch(ctx, body.brief));
+  const mode = MODE_FIELDS.filter((k) => k in body).join(',');
+  if (mode === 'brief' && typeof body.brief === 'string') return json(await newSearch(ctx, body.brief));
+  if (mode === 'filters,parent_search_id' && typeof body.parent_search_id === 'string') return json(await correctSearch(ctx, body.parent_search_id, body.filters));
+  if (mode === 'saved_brief_id' && typeof body.saved_brief_id === 'string') return json(await rerunSaved(ctx, body.saved_brief_id));
   throw new HttpError(400, 'Send { "brief": "..." } to search.');
 });
 ```
@@ -857,8 +898,17 @@ git commit -m "feat: search, correction, saved re-run, paging and plan API"
 
 ```ts
 import { readFileSync } from 'node:fs';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { COMPANY, admin, api, signIn } from './helpers';
+
+const scores: { precision: number; recall: number; p20: number }[] = [];
+// The "baseline / best eval score" for SCORING.md and the README: the mean over every sample.
+afterAll(() => {
+  if (!scores.length) return;
+  const mean = (k: 'precision' | 'recall' | 'p20') => scores.reduce((a, s) => a + s[k], 0) / scores.length;
+  const p = mean('precision'), r = mean('recall');
+  console.log(`MEAN over ${scores.length} samples: P=${p.toFixed(3)} R=${r.toFixed(3)} F1=${(p + r ? (2 * p * r) / (p + r) : 0).toFixed(3)} P@20=${mean('p20').toFixed(3)}`);
+});
 
 const hasKey = Boolean(process.env.OPENAI_API_KEY);
 const samples: { brief: string; expected_ids: string[] }[] = JSON.parse(readFileSync('data/queries.json', 'utf8'));
@@ -878,6 +928,7 @@ async function searchAll(brief: string) {
   const page1 = [...ids];
   for (let page = 2; ids.length < first.body.total; page++) {
     const r = await api(token, 'GET', `/api/search/${first.body.search_id}?page=${page}`);
+    if (!r.body?.results?.length) break; // never loop forever on a short page
     ids.push(...r.body.results.map((c: { id: string }) => c.id));
   }
   return { ids, page1, filters: first.body.filters, total: first.body.total };
@@ -895,6 +946,7 @@ describe.runIf(hasKey)('accuracy (the grader\'s method)', () => {
     const recall = expected.size ? tp / expected.size : ids.length === 0 ? 1 : 0;
     const p20 = page1.length ? page1.filter((id) => expected.has(id)).length / page1.length : expected.size === 0 ? 1 : 0;
     console.log(`P=${precision.toFixed(2)} R=${recall.toFixed(2)} P@20=${p20.toFixed(2)}  ${brief}`);
+    scores.push({ precision, recall, p20 });
     expect(new Set(ids).size).toBe(ids.length); // every result exactly once
     expect({ precision, recall }).toEqual({ precision: 1, recall: 1 });
   });
@@ -903,6 +955,12 @@ describe.runIf(hasKey)('accuracy (the grader\'s method)', () => {
     const { filters, total } = await searchAll(brief);
     if (zero) expect(total).toBe(0);
     else expect(sorted(filters)).toBe(sorted(want!));
+  });
+
+  it('hostile briefs changed no data (X4)', async () => {
+    const db = admin();
+    expect((await db.from('candidates').select('id', { count: 'exact', head: true })).count).toBe(5000);
+    expect((await db.from('companies').select('slug').order('slug')).data).toEqual([{ slug: 'acme' }, { slug: 'globex' }]);
   });
 });
 ```
@@ -979,3 +1037,28 @@ Expected: PASS. If an `extra` case fails, change **only** `SYSTEM_PROMPT` rules 
 git add tests/briefs.extra.json tests/accuracy.test.ts tests/quota.test.ts tests/speed.test.ts
 git commit -m "test: grader-style accuracy, free-plan race and speed suites"
 ```
+
+---
+
+## Requirements check (plan review, 2026-10-07)
+
+An independent reviewer checked this phase against TECH_REQUIREMENTS, SCORING, SPEC, ARCHITECTURE and DESIGN. I verified each finding against those docs before accepting or rejecting it.
+
+| Requirement | Where in this phase | Proof |
+|---|---|---|
+| F1 / TECH §3: `POST /api/search`, `GET /api/search/{id}?page=N`, `GET /api/plan` exact shapes | Task 8 routes | `tests/search-api.test.ts` |
+| FR-2.8: exactly one mode per request, else 400 | route compares which mode fields are present | search-api "two modes at once" cases |
+| L1–L10: the AI only translates; values from the data; no candidate data sent; 6 s timeout, no retry | `prompt.ts`, `llm.ts` | `tests/unit/llm.test.ts` |
+| FR-2.3 / L7: unknown keys, wrong types and unknown values become `unsupported`, never applied, never dropped | `cleanFilters` | `tests/unit/filters.test.ts` |
+| FR-2.6 / X4: vague or hostile briefs → 0 results, no data changed | `cleanFilters` + SQL guard | accuracy "extra" battery + "hostile briefs changed no data" |
+| FR-8.4: any failure after the reservation refunds it | `finish()` runs page 1 and the plan read before `complete_search` | search-api, quota tests |
+| FR-4 / FR-4.5: corrections free, 10 per search, then 429 | `correctSearch` | search-api corrections test |
+| FR-7.2: saved re-run uses the stored filters and a search | `rerunSaved` | search-api saved test |
+| Accuracy (25 pts): samples exact; baseline score recorded | prompt + filters | accuracy test, `MEAN over N samples` line |
+| P1 / P2: paging < 300 ms, search < 3 s | | `tests/speed.test.ts` (our targets 150 ms / 2 s) |
+
+**Changed after review:** `cleanFilters` no longer rejects a whole object for one odd value (it returned 502 on long or out-of-range model output and 400 on unexpected filter shapes from the contract's routes); it now clamps, trims, de-duplicates and moves anything unusable to `unsupported`. Page 1 is fetched before the search is marked done, so a late failure is still refunded; failed refunds are logged. Exact mode matching; prompt rule that role names stay roles ("machine learning engineers"); `headline` on cards; the paging loop in the accuracy test can't hang; mean P/R/F1 printed; token usage can be logged for the README's cost figure.
+
+**Rejected:** a 400 for a saved search whose stored filters fail the check. Saved filters are always checked as an object when saved, so this can't happen. Saving a search that can never return anyone is prevented in the UI instead (Task 15).
+
+**Verdict:** ready to implement.

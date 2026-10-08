@@ -1,5 +1,8 @@
 # Phase 2: Database and security
 
+> **In short:** Puts the security rules inside the database itself: each company sees only its own lists, saved searches and searches, and nobody can change plans, quotas or billing directly.
+> It also holds the fixed SQL search and the race-safe "one free search" counter; the tests attack it the way the grader's script will, with a real recruiter's token.
+
 Goal: the database itself keeps the companies apart and protects the plan, quota and billing tables, even against a recruiter calling Supabase directly with their own token. This is worth the all-or-nothing 10 security points, plus the free-plan points.
 
 ---
@@ -14,7 +17,7 @@ Goal: the database itself keeps the companies apart and protects the plan, quota
 - Consumes: the tables from Task 2; helpers `admin()`, `signIn()`, `asUser()`, `resetCompany()`, `COMPANY`.
 - Produces (callable through `client.rpc(name, args)`):
   - `current_company_id() → uuid`
-  - `search_candidates(f jsonb, lim int, off int) → jsonb { total: number, results: CandidateCard[] }` where `CandidateCard = { id, full_name, avatar_url, current_title, current_company, city, years_experience, open_to_work, skills }`
+  - `search_candidates(f jsonb, lim int, off int) → jsonb { total: number, results: CandidateCard[] }` where `CandidateCard = { id, full_name, avatar_url, headline, current_title, current_company, city, years_experience, open_to_work, skills }`
   - `reserve_search(p_brief text) → uuid | null` (null = no searches left)
   - `complete_search(p_search uuid, p_filters jsonb) → boolean`
   - `refund_search(p_search uuid) → boolean`
@@ -53,7 +56,7 @@ describe('search_candidates', () => {
     expect(r.total).toBe(47);
     expect(r.results).toHaveLength(20);
     expect(Object.keys(r.results[0]).sort()).toEqual(
-      ['avatar_url', 'city', 'current_company', 'current_title', 'full_name', 'id', 'open_to_work', 'skills', 'years_experience'],
+      ['avatar_url', 'city', 'current_company', 'current_title', 'full_name', 'headline', 'id', 'open_to_work', 'skills', 'years_experience'],
     );
   });
 
@@ -141,7 +144,7 @@ describe('apply_billing_event', () => {
     const { error } = await asUser(await signIn('acme')).rpc('apply_billing_event', {
       p_event_id: 'x', p_created: 1, p_type: 'customer.subscription.created', p_subscription: 's', p_company: 'acme', p_status: 'active',
     });
-    expect(error).toBeTruthy();
+    expect(error?.code).toBe('42501'); // permission denied, not just "some error"
   });
 });
 ```
@@ -179,7 +182,7 @@ as $$ select case when jsonb_typeof(f -> k) = 'string' then f ->> k end $$;
 create function public.filters_have_conditions(f jsonb) returns boolean
 language sql immutable set search_path = ''
 as $$
-  select public.f_arr(f, 'unsupported') is null and (
+  select coalesce(f -> 'unsupported', '[]'::jsonb) in ('[]'::jsonb, 'null'::jsonb) and (
        public.f_arr(f, 'roles') is not null or public.f_arr(f, 'seniorities') is not null
     or public.f_arr(f, 'cities') is not null or public.f_arr(f, 'skills') is not null
     or public.f_arr(f, 'any_skills') is not null or public.f_arr(f, 'companies') is not null
@@ -194,33 +197,44 @@ $$;
 create function public.search_candidates(f jsonb, lim int, off int) returns jsonb
 language sql stable security invoker set search_path = ''
 as $$
-  with m as (
-    select c.id, c.full_name, c.avatar_url, c.current_title, c.current_company, c.city,
+  -- Read each filter once (one row), not once per candidate: keeps the query fast and lets the GIN indexes work.
+  with p as (
+    select public.f_arr(f, 'roles') roles, public.f_arr(f, 'seniorities') seniorities, public.f_arr(f, 'cities') cities,
+           public.f_arr(f, 'skills') skills, public.f_arr(f, 'any_skills') any_skills, public.f_arr(f, 'companies') companies,
+           public.f_arr(f, 'current_companies') current_companies, public.f_arr(f, 'degrees') degrees,
+           public.f_arr(f, 'fields') fields, public.f_arr(f, 'schools') schools,
+           public.f_num(f, 'min_years') min_years, public.f_num(f, 'max_years') max_years,
+           f -> 'open_to_work' = 'true'::jsonb open_only,
+           public.f_txt(f, 'worked_at_company_type') worked_type, public.f_txt(f, 'current_company_type') current_type,
+           public.filters_have_conditions(f) ok
+  ),
+  m as (
+    select c.id, c.full_name, c.avatar_url, c.headline, c.current_title, c.current_company, c.city,
            c.years_experience, c.open_to_work, c.skills
-    from public.candidates c
-    where public.filters_have_conditions(f)
-      and (public.f_arr(f, 'roles') is null or c.role = any (public.f_arr(f, 'roles')))
-      and (public.f_arr(f, 'seniorities') is null or c.seniority = any (public.f_arr(f, 'seniorities')))
-      and (public.f_arr(f, 'cities') is null or c.city = any (public.f_arr(f, 'cities')))
-      and (public.f_arr(f, 'skills') is null or c.skills @> public.f_arr(f, 'skills'))
-      and (public.f_arr(f, 'any_skills') is null or c.skills && public.f_arr(f, 'any_skills'))
-      and (public.f_arr(f, 'companies') is null or c.companies && public.f_arr(f, 'companies'))
-      and (public.f_arr(f, 'current_companies') is null or c.current_company = any (public.f_arr(f, 'current_companies')))
-      and (public.f_arr(f, 'degrees') is null or c.degrees && public.f_arr(f, 'degrees'))
-      and (public.f_arr(f, 'fields') is null or c.fields && public.f_arr(f, 'fields'))
-      and (public.f_arr(f, 'schools') is null or c.schools && public.f_arr(f, 'schools'))
-      and (public.f_num(f, 'min_years') is null or c.years_experience >= public.f_num(f, 'min_years'))
-      and (public.f_num(f, 'max_years') is null or c.years_experience <= public.f_num(f, 'max_years'))
-      and (f -> 'open_to_work' is distinct from 'true'::jsonb or c.open_to_work)
-      and (public.f_txt(f, 'worked_at_company_type') is null or c.company_types @> array[public.f_txt(f, 'worked_at_company_type')])
-      and (public.f_txt(f, 'current_company_type') is null or c.current_company_type = public.f_txt(f, 'current_company_type'))
+    from public.candidates c, p
+    where p.ok
+      and (p.roles is null or c.role = any (p.roles))
+      and (p.seniorities is null or c.seniority = any (p.seniorities))
+      and (p.cities is null or c.city = any (p.cities))
+      and (p.skills is null or c.skills @> p.skills)
+      and (p.any_skills is null or c.skills && p.any_skills)
+      and (p.companies is null or c.companies && p.companies)
+      and (p.current_companies is null or c.current_company = any (p.current_companies))
+      and (p.degrees is null or c.degrees && p.degrees)
+      and (p.fields is null or c.fields && p.fields)
+      and (p.schools is null or c.schools && p.schools)
+      and (p.min_years is null or c.years_experience >= p.min_years)
+      and (p.max_years is null or c.years_experience <= p.max_years)
+      and (p.open_only is not true or c.open_to_work)
+      and (p.worked_type is null or c.company_types @> array[p.worked_type])
+      and (p.current_type is null or c.current_company_type = p.current_type)
   )
   select jsonb_build_object(
     'total', (select count(*) from m),
     'results', coalesce((
-      select jsonb_agg(to_jsonb(p) order by p.open_to_work desc, p.years_experience desc, p.id)
+      select jsonb_agg(to_jsonb(r) order by r.open_to_work desc, r.years_experience desc, r.id)
       from (select * from m order by open_to_work desc, years_experience desc, id
-            limit least(greatest(lim, 0), 100) offset greatest(off, 0)) p
+            limit least(greatest(lim, 0), 100) offset greatest(off, 0)) r
     ), '[]'::jsonb))
 $$;
 
@@ -288,7 +302,8 @@ declare cid uuid; eff text;
 begin
   insert into public.billing_events (event_id) values (p_event_id) on conflict do nothing;
   if not found then return 'duplicate'; end if;
-  select id into cid from public.companies where slug = p_company;
+  -- Lock the company row: concurrent events for one company apply one at a time, so the plan below never reads stale state.
+  select id into cid from public.companies where slug = p_company for update;
   if cid is null then return 'unknown_company'; end if;
   eff := case when p_type = 'customer.subscription.deleted' then 'canceled' else p_status end;
   -- Older events never overwrite newer state; on a same-second tie a cancellation wins.
@@ -304,7 +319,7 @@ begin
      set plan = case when exists (select 1 from public.subscriptions x
                                    where x.company_id = c.id and x.status in ('active', 'trialing'))
                      then 'paid' else 'free' end
-   where c.id = cid;
+   where true;  -- both companies (2 rows): also right if a subscription moved between companies
   return 'applied';
 end $$;
 
@@ -340,6 +355,10 @@ create policy saved_briefs_own on public.saved_briefs for all to authenticated
 revoke all on all tables in schema public from anon, authenticated;
 revoke all on all sequences in schema public from anon, authenticated;
 revoke execute on all functions in schema public from public, anon, authenticated;
+-- ...and for anything a later migration creates.
+alter default privileges in schema public revoke all on tables from anon, authenticated;
+alter default privileges in schema public revoke all on sequences from anon, authenticated;
+alter default privileges in schema public revoke execute on functions from public, anon, authenticated;
 
 grant select on public.candidates, public.companies, public.recruiters, public.searches to authenticated;
 grant select, insert, delete on public.shortlists to authenticated;
@@ -386,6 +405,7 @@ This mirrors the grader's script: *"signed in as one company, our script tries t
 
 ```ts
 import { beforeAll, describe, expect, it } from 'vitest';
+import { createClient } from '@supabase/supabase-js';
 import { COMPANY, admin, asUser, signIn } from './helpers';
 
 let acme: ReturnType<typeof asUser>;
@@ -408,17 +428,6 @@ beforeAll(async () => {
   await acme.rpc('complete_search', { p_search: acmeReady, p_filters: { roles: ['Recruiter'] } });
 });
 
-const globexState = async () => {
-  const db = admin();
-  return {
-    list: (await db.from('shortlists').select('name').eq('id', globexList).single()).data,
-    members: (await db.from('shortlist_members').select('candidate_id').eq('shortlist_id', globexList)).data,
-    saved: (await db.from('saved_briefs').select('brief').eq('id', globexSaved).single()).data,
-    search: (await db.from('searches').select('status').eq('id', globexSearch).single()).data,
-    company: (await db.from('companies').select('plan, searches_used').eq('id', COMPANY.globex).single()).data,
-  };
-};
-
 describe('acme cannot read globex data directly through Supabase', () => {
   it.each(['shortlists', 'shortlist_members', 'saved_briefs', 'searches', 'companies', 'recruiters'])('%s shows no globex rows', async (table) => {
     const { data } = await acme.from(table).select('*');
@@ -426,62 +435,95 @@ describe('acme cannot read globex data directly through Supabase', () => {
   });
 
   it.each(['subscriptions', 'billing_events'])('%s is not readable at all', async (table) => {
-    const { data, error } = await acme.from(table).select('*');
-    expect(error ?? (data?.length === 0 ? 'empty' : null)).toBeTruthy();
+    expect((await acme.from(table).select('*')).error?.code).toBe('42501');
   });
 });
 
-describe('acme cannot change globex data directly through Supabase', () => {
-  it('every write attempt leaves globex untouched', async () => {
-    const before = await globexState();
-    await acme.from('shortlists').update({ name: 'pwned' }).eq('id', globexList);
-    await acme.from('shortlists').delete().eq('id', globexList);
-    await acme.from('shortlists').insert({ company_id: COMPANY.globex, name: 'planted' });
-    await acme.from('shortlist_members').insert({ shortlist_id: globexList, company_id: COMPANY.acme, candidate_id: 'cand_0002' });
-    await acme.from('shortlist_members').insert({ shortlist_id: globexList, company_id: COMPANY.globex, candidate_id: 'cand_0003' });
-    await acme.from('shortlist_members').delete().eq('shortlist_id', globexList);
-    await acme.from('saved_briefs').update({ brief: 'pwned' }).eq('id', globexSaved);
-    await acme.from('saved_briefs').delete().eq('id', globexSaved);
-    await acme.from('saved_briefs').insert({ company_id: COMPANY.globex, brief: 'planted', filters: {} });
-    await acme.from('searches').update({ status: 'refunded' }).eq('id', globexSearch);
+// Every table x insert/update/delete, aimed at globex's rows (and at moving acme's recruiter into globex).
+// [table, row to plant, patch, filter column, filter value]
+const attacks = (): [string, Record<string, unknown>, Record<string, unknown>, string, string][] => [
+  ['companies', { id: crypto.randomUUID(), slug: 'acme', name: 'x' }, { plan: 'paid', searches_used: 0 }, 'id', COMPANY.globex],
+  ['recruiters', { user_id: crypto.randomUUID(), company_id: COMPANY.globex }, { company_id: COMPANY.globex }, 'company_id', COMPANY.acme],
+  ['candidates', { id: 'cand_9999' }, { full_name: 'pwned' }, 'id', 'cand_0001'],
+  ['searches', { company_id: COMPANY.globex, brief: 'x', status: 'ready', filters: {} }, { status: 'refunded' }, 'company_id', COMPANY.globex],
+  ['shortlists', { company_id: COMPANY.globex, name: 'planted' }, { name: 'pwned' }, 'company_id', COMPANY.globex],
+  ['shortlist_members', { shortlist_id: globexList, company_id: COMPANY.globex, candidate_id: 'cand_0003' }, { candidate_id: 'cand_0004' }, 'company_id', COMPANY.globex],
+  ['saved_briefs', { company_id: COMPANY.globex, brief: 'planted', filters: {} }, { brief: 'pwned' }, 'company_id', COMPANY.globex],
+  ['subscriptions', { stripe_subscription_id: 'x', company_id: COMPANY.globex, status: 'active', last_event_created: 1, last_event_type: 'x' }, { status: 'active' }, 'company_id', COMPANY.globex],
+  ['billing_events', { event_id: 'planted' }, { event_id: 'pwned' }, 'event_id', 'planted'],
+];
+
+// Everything a recruiter could damage, read with the service key (candidates: count + one row; 5,000 rows are too many to compare).
+const ORDER: Record<string, string> = { recruiters: 'user_id', billing_events: 'event_id', subscriptions: 'stripe_subscription_id', shortlist_members: 'candidate_id' };
+const snapshot = async () => {
+  const db = admin();
+  const out: Record<string, unknown> = {};
+  for (const t of ['companies', 'recruiters', 'searches', 'shortlists', 'shortlist_members', 'saved_briefs', 'subscriptions', 'billing_events']) {
+    out[t] = (await db.from(t).select('*').order(ORDER[t] ?? 'id')).data;
+  }
+  out.candidates = [
+    (await db.from('candidates').select('id', { count: 'exact', head: true })).count,
+    (await db.from('candidates').select('full_name').eq('id', 'cand_0001').single()).data,
+  ];
+  return out;
+};
+
+describe('acme cannot change anything it does not own, directly through Supabase', () => {
+  it('every insert is refused with permission denied, and no update or delete changes a row', async () => {
+    const before = await snapshot();
+    for (const [table, row, patch, col, val] of attacks()) {
+      expect((await acme.from(table).insert(row)).error?.code, `${table} insert`).toBe('42501');
+      await acme.from(table).update(patch).eq(col, val);
+      await acme.from(table).delete().eq(col, val);
+    }
+    // Planting a member on globex's list while claiming to be acme: blocked by the composite key.
+    expect((await acme.from('shortlist_members').insert({ shortlist_id: globexList, company_id: COMPANY.acme, candidate_id: 'cand_0002' })).error).toBeTruthy();
     await acme.rpc('complete_search', { p_search: globexSearch, p_filters: {} });
     await acme.rpc('refund_search', { p_search: globexSearch });
-    await acme.from('companies').update({ plan: 'paid', searches_used: 0 }).eq('id', COMPANY.globex);
-    expect(await globexState()).toEqual(before);
-    const { count } = await admin().from('shortlists').select('id', { count: 'exact', head: true }).eq('company_id', COMPANY.globex);
-    expect(count).toBe(1);
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it('acme is still acme (cannot move its recruiter into globex)', async () => {
+    expect((await acme.rpc('current_company_id')).data).toBe(COMPANY.acme);
+  });
+
+  it('cannot branch a correction off a finished globex search', async () => {
+    const ready = (await admin().from('searches').insert({ company_id: COMPANY.globex, brief: 'g', status: 'ready', filters: { roles: ['Recruiter'] } }).select('id').single()).data!.id;
+    expect((await acme.rpc('create_correction', { p_parent: ready, p_filters: { roles: ['Recruiter'] } })).data).toEqual({ error: 'not_found' });
   });
 });
 
 describe('acme cannot cheat its own plan or quota', () => {
   it('cannot set its plan, reset its counter, insert searches, or refund a finished search', async () => {
     await acme.from('companies').update({ plan: 'paid', searches_used: 0 }).eq('id', COMPANY.acme);
-    await acme.from('searches').insert({ company_id: COMPANY.acme, brief: 'x', status: 'ready', filters: {} });
+    const acmeSearches = async () => (await admin().from('searches').select('id', { count: 'exact', head: true }).eq('company_id', COMPANY.acme)).count;
+    const searchesBefore = await acmeSearches();
+    expect((await acme.from('searches').insert({ company_id: COMPANY.acme, brief: 'x', status: 'ready', filters: {} })).error?.code).toBe('42501');
     expect((await acme.rpc('refund_search', { p_search: acmeReady })).data).toBe(false);
+    expect(await acmeSearches()).toBe(searchesBefore);
     const { data } = await admin().from('companies').select('plan, searches_used').eq('id', COMPANY.acme).single();
     expect(data).toEqual({ plan: 'free', searches_used: 1 });
     const { error } = await acme.from('subscriptions').insert({ stripe_subscription_id: 'x', company_id: COMPANY.acme, status: 'active', last_event_created: 1, last_event_type: 'x' });
-    expect(error).toBeTruthy();
+    expect(error?.code).toBe('42501');
   });
 });
 
 describe('signed-out visitors get nothing', () => {
+  // Exactly what a signed-out browser has: the publishable key and no session.
+  const anon = () => createClient(process.env.SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!, { auth: { persistSession: false } });
+
   it.each(['candidates', 'companies', 'recruiters', 'searches', 'shortlists', 'shortlist_members', 'saved_briefs', 'subscriptions', 'billing_events'])('%s', async (table) => {
-    const anon = asUser(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!);
-    const { data, error } = await anon.from(table).select('*').limit(1);
-    expect(error ?? (data?.length === 0 ? 'empty' : null)).toBeTruthy();
+    expect((await anon().from(table).select('*').limit(1)).error?.code).toBe('42501');
   });
 
   it('cannot call the search or quota functions', async () => {
-    const anon = asUser(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!);
-    const { error } = await anon.rpc('search_candidates', { f: { roles: ['Recruiter'] }, lim: 20, off: 0 });
-    expect(error).toBeTruthy();
-    expect((await anon.rpc('reserve_search', { p_brief: 'x' })).error).toBeTruthy();
+    expect((await anon().rpc('search_candidates', { f: { roles: ['Recruiter'] }, lim: 20, off: 0 })).error?.code).toBe('42501');
+    expect((await anon().rpc('reserve_search', { p_brief: 'x' })).error?.code).toBe('42501');
   });
 });
 ```
 
-Note: `asUser(<publishable key>)` sends the publishable key as the bearer, which is exactly what a signed-out browser sends.
+Every assertion checks for `42501` (permission denied), not just "an error": a typo in a function name or argument is also an error and must not count as a pass.
 
 - [ ] **Step 2: Run it**
 
@@ -494,3 +536,26 @@ Expected: PASS. **Any failure here is a release blocker** (the security score is
 git add tests/isolation.test.ts
 git commit -m "test: direct-Supabase isolation attack suite"
 ```
+
+---
+
+## Requirements check (plan review, 2026-10-07)
+
+An independent reviewer checked this phase against TECH_REQUIREMENTS, SCORING, SPEC, ARCHITECTURE and DESIGN. I verified each finding against those docs before accepting or rejecting it.
+
+| Requirement | Where in this phase | Proof |
+|---|---|---|
+| X1 / SEC-1: companies can't see or change each other's data, through Supabase directly | RLS policies, revoked grants, composite key on list members | `tests/isolation.test.ts`: every table × insert/update/delete, each refused with `42501`, full before/after snapshot |
+| SEC-2 / OQ-8: a recruiter can't change their own plan, quota or company | no write grants on `companies`, `recruiters`, `searches`; definer functions only | isolation "cheat" test; "acme is still acme" test |
+| F6 / FR-8.3: exactly one free search, even under a burst | one conditional `UPDATE` in `reserve_search` | `db.test.ts`: 20 concurrent → 1 |
+| FR-8.4: refunds can't be abused | refund only while `pending` | `db.test.ts`, isolation test |
+| FR-4.5: corrections capped at 10 | `create_correction` | `db.test.ts` |
+| FR-2.6: never "everyone" | `filters_have_conditions` in SQL (any `unsupported` blocks) | `db.test.ts` empty-filter cases |
+| B2 / B3 / FR-9.4: dedup, ordering, same-second cancellation wins | `apply_billing_event` in one transaction, company row locked | `db.test.ts` billing case; Task 10 replay |
+| P1: paging fast | filters read once (one-row CTE) so indexes work | Task 9 speed test |
+
+**Changed after review:** tests assert `42501` (permission denied), not just "an error" (a typo would also be an error); the attack covers every table and verb, moving acme's recruiter into globex, and branching a correction off a finished globex search; search reads each filter once instead of once per candidate; billing locks the company row so concurrent events can't set the wrong plan, and recomputes both companies; default privileges revoked for future migrations; `unsupported` of any non-empty shape blocks the search; result cards include `headline` (NOTES search-flow row).
+
+**Open question for you:** a free recruiter who has used their one search can still call the search function, or read the candidates table, directly through Supabase with their own token, and get unlimited results. They can't change their quota, but they can skip it. Closing this means the server reads candidates with its own key and recruiters get no direct read access to candidates. It's a small change to Tasks 4, 8 and 11–12, and to ARCHITECTURE. See the summary in chat.
+
+**Verdict:** ready to implement once the open question is answered.

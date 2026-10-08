@@ -1,5 +1,8 @@
 # Phase 4: Billing
 
+> **In short:** Receives Stripe's billing events, checks each signature against the exact bytes that were sent, and updates the company's plan.
+> Repeats are ignored and older events never overwrite newer ones; replaying the sample file ends with acme free and globex paid, with `/api/plan` checked after every event.
+
 Goal: `POST /api/billing/events` verifies Stripe signatures on the exact raw body, ignores repeats, never lets an older event overwrite newer state, and keeps `/api/plan` right after every event. Proven by replaying the sample file. Worth 15 points.
 
 ---
@@ -8,21 +11,22 @@ Goal: `POST /api/billing/events` verifies Stripe signatures on the exact raw bod
 
 **Files:**
 - Create: `lib/server/billing.ts`, `app/api/billing/events/route.ts`
-- Test: `tests/unit/signature.test.ts`, `tests/billing.test.ts`
+- Modify: `.github/workflows/ci.yml` (adds the no-keys job)
+- Test: `tests/unit/signature.test.ts`, `tests/billing.test.ts`, `tests/no-keys.test.ts`
 
 **Interfaces:**
-- Consumes: `adminClient()` (Task 8; **only** this file may call it), `apply_billing_event` (Task 4), `route`/`json` (Task 8).
+- Consumes: `adminClient()` (Task 8; **only** this file may call it), `apply_billing_event` (Task 4), `route`/`json`/`must` (Task 8).
 - Produces:
-  - `verifyStripeSignature(raw: string, header: string | null, secret: string): boolean`
-  - `processStripeWebhook(raw: string, signatureHeader: string | null): Promise<{ status: number; body: Record<string, unknown> }>`
+  - `verifyStripeSignature(raw: string | Buffer, header: string | null, secret: string): boolean`
+  - `processStripeWebhook(raw: Buffer | string, signatureHeader: string | null): Promise<{ status: number; body: Record<string, unknown> }>`
 
 - [ ] **Step 1: Write the failing unit test `tests/unit/signature.test.ts`**
 
 ```ts
 import { createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
-import { verifyStripeSignature } from '@/lib/server/billing';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { processStripeWebhook, verifyStripeSignature } from '@/lib/server/billing';
 
 const SAMPLE_SECRET = 'whsec_rotto_assessment_sample';
 const sample = JSON.parse(readFileSync('data/stripe-events.json', 'utf8')).events as { payload: string; headers: Record<string, string> }[];
@@ -50,6 +54,22 @@ describe('verifyStripeSignature', () => {
     expect(verifyStripeSignature(raw, `${good},v1=${'0'.repeat(64)}`, 'whsec_other')).toBe(true);
   });
 });
+
+describe('processStripeWebhook without a database call', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('500 and no change when STRIPE_WEBHOOK_SECRET is not set (S7)', async () => {
+    vi.stubEnv('STRIPE_WEBHOOK_SECRET', '');
+    expect((await processStripeWebhook(sample[0].payload, sample[0].headers['Stripe-Signature'])).status).toBe(500);
+  });
+
+  it('a correctly signed but odd body is acknowledged (200), never a retry loop', async () => {
+    vi.stubEnv('STRIPE_WEBHOOK_SECRET', 'whsec_other');
+    for (const raw of ['null', '[]', '"x"', 'not json', JSON.stringify({ id: 'e', type: 'customer.subscription.created', created: 1.5, data: { object: { id: 's', status: 'active', metadata: { company: 'acme' } } } })]) {
+      expect((await processStripeWebhook(raw, sign(raw, 'whsec_other'))).status, raw).toBe(200);
+    }
+  });
+});
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
@@ -69,7 +89,7 @@ import { adminClient } from './supabase';
  * Stripe's scheme: HMAC-SHA256(secret, `${t}.${rawBody}`), hex, in any `v1=` of the header.
  * No timestamp tolerance on purpose: the graders replay old events; repeats and ordering protect us (NOTES.md).
  */
-export function verifyStripeSignature(raw: string, header: string | null, secret: string): boolean {
+export function verifyStripeSignature(raw: string | Buffer, header: string | null, secret: string): boolean {
   if (!header) return false;
   const pairs = header.split(',').map((p) => {
     const i = p.indexOf('=');
@@ -78,7 +98,7 @@ export function verifyStripeSignature(raw: string, header: string | null, secret
   const t = pairs.find(([k]) => k === 't')?.[1];
   const candidates = pairs.filter(([k, v]) => k === 'v1' && /^[0-9a-f]{64}$/i.test(v)).map(([, v]) => v);
   if (!t || !/^\d+$/.test(t) || candidates.length === 0) return false;
-  const expected = createHmac('sha256', secret).update(`${t}.${raw}`, 'utf8').digest();
+  const expected = createHmac('sha256', secret).update(`${t}.`).update(raw).digest();
   return candidates.some((v) => timingSafeEqual(Buffer.from(v, 'hex'), expected));
 }
 
@@ -87,28 +107,35 @@ type StripeEvent = {
   data?: { object?: { id?: unknown; status?: unknown; metadata?: { company?: unknown } } };
 };
 
-export async function processStripeWebhook(raw: string, signatureHeader: string | null) {
+const ignored = (why: string, id?: unknown) => {
+  console.warn('billing event ignored:', why, typeof id === 'string' ? id : '');
+  return { status: 200, body: { received: true, result: 'ignored' } };
+};
+
+/** 400 only for a bad signature; 500 only when we can't process (Stripe retries); anything else signed is a 200. */
+export async function processStripeWebhook(raw: Buffer | string, signatureHeader: string | null) {
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!secret) return { status: 500, body: { error: 'Billing is not set up on this server yet.' } };
   if (!verifyStripeSignature(raw, signatureHeader, secret)) return { status: 400, body: { error: 'Invalid signature.' } };
 
   let event: StripeEvent;
-  try { event = JSON.parse(raw); } catch { return { status: 200, body: { received: true, result: 'ignored' } }; }
+  try { event = JSON.parse(raw.toString()); } catch { return ignored('not JSON'); }
+  if (!event || typeof event !== 'object' || Array.isArray(event)) return ignored('not an object');
   const sub = event.data?.object;
   const company = sub?.metadata?.company;
+  if (typeof event.type !== 'string' || !event.type.startsWith('customer.subscription.')) return ignored(`type ${String(event.type)}`, event.id);
   if (
-    typeof event.type !== 'string' || !event.type.startsWith('customer.subscription.') ||
-    typeof event.id !== 'string' || typeof event.created !== 'number' ||
-    typeof sub?.id !== 'string' || typeof sub.status !== 'string' ||
-    (company !== 'acme' && company !== 'globex')
+    typeof event.id !== 'string' || !Number.isSafeInteger(event.created) ||
+    typeof sub?.id !== 'string' || typeof sub.status !== 'string' || typeof company !== 'string'
   ) {
-    return { status: 200, body: { received: true, result: 'ignored' } };
+    return ignored('missing or malformed fields', event.id);
   }
 
   const result = must(await adminClient().rpc('apply_billing_event', {
     p_event_id: event.id, p_created: event.created, p_type: event.type,
     p_subscription: sub.id, p_company: company, p_status: sub.status,
   }));
+  if (result === 'unknown_company') console.warn('billing event ignored: unknown company', company, event.id); // FR-9.5
   return { status: 200, body: { received: true, result } };
 }
 ```
@@ -119,9 +146,9 @@ export async function processStripeWebhook(raw: string, signatureHeader: string 
 import { processStripeWebhook } from '@/lib/server/billing';
 import { json, route } from '@/lib/server/http';
 
-// No recruiter token: Stripe calls this. The raw text is verified byte for byte, never re-serialised.
+// No recruiter token: Stripe calls this. The raw bytes are verified exactly as sent, never decoded or re-serialised first.
 export const POST = route(async (req) => {
-  const { status, body } = await processStripeWebhook(await req.text(), req.headers.get('stripe-signature'));
+  const { status, body } = await processStripeWebhook(Buffer.from(await req.arrayBuffer()), req.headers.get('stripe-signature'));
   return json(body, status);
 });
 ```
@@ -129,7 +156,7 @@ export const POST = route(async (req) => {
 - [ ] **Step 5: Run the unit test**
 
 Run: `npm run test:unit -- tests/unit/signature.test.ts`
-Expected: PASS.
+Expected: PASS (5 tests).
 
 - [ ] **Step 6: Write the integration test `tests/billing.test.ts`**
 
@@ -151,14 +178,17 @@ const t0 = (e: { headers: Record<string, string> }) => Number(/t=(\d+)/.exec(e.h
 
 async function plans() {
   const [a, g] = await Promise.all([signIn('acme'), signIn('globex')]);
-  return { acme: (await api(a, 'GET', '/api/plan')).body.plan, globex: (await api(g, 'GET', '/api/plan')).body.plan };
+  const [ab, gb] = [(await api(a, 'GET', '/api/plan')).body, (await api(g, 'GET', '/api/plan')).body];
+  // The whole body: paid must also mean searches_remaining null (SCORING §4).
+  for (const b of [ab, gb]) expect(b).toEqual(b.plan === 'paid' ? { plan: 'paid', searches_remaining: null } : { plan: 'free', searches_remaining: 1 });
+  return { acme: ab.plan, globex: gb.plan };
 }
 
 beforeEach(async () => {
   const db = admin();
   await db.from('billing_events').delete().neq('event_id', '');
   await db.from('subscriptions').delete().neq('stripe_subscription_id', '');
-  await db.from('companies').update({ plan: 'free' }).in('id', [COMPANY.acme, COMPANY.globex]);
+  await db.from('companies').update({ plan: 'free', searches_used: 0 }).in('id', [COMPANY.acme, COMPANY.globex]);
 });
 
 describe.runIf(Boolean(SECRET))('POST /api/billing/events', () => {
@@ -207,9 +237,74 @@ describe.runIf(Boolean(SECRET))('POST /api/billing/events', () => {
 Run: `npm test -- tests/billing.test.ts`
 Expected: PASS. Also run it once with `STRIPE_WEBHOOK_SECRET=whsec_rotto_assessment_sample` and once with any other value: both must pass.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 8: Write `tests/no-keys.test.ts` (S7: the app boots and works without the grader's keys)**
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { BASE, api, resetCompany, signIn } from './helpers';
+
+const noKeys = !process.env.OPENAI_API_KEY && !process.env.STRIPE_WEBHOOK_SECRET;
+
+describe.runIf(noKeys)('without OPENAI_API_KEY and STRIPE_WEBHOOK_SECRET', () => {
+  it('sign-in and the plan work; search says 503 and uses no search', async () => {
+    await resetCompany('acme');
+    const t = await signIn('acme');
+    expect((await api(t, 'POST', '/api/search', { brief: 'data scientists with a PhD' })).status).toBe(503);
+    expect((await api(t, 'GET', '/api/plan')).body).toEqual({ plan: 'free', searches_remaining: 1 });
+  });
+
+  it('the webhook returns 500 and changes nothing', async () => {
+    const res = await fetch(`${BASE}/api/billing/events`, { method: 'POST', headers: { 'stripe-signature': 't=1,v1=00' }, body: '{}' });
+    expect(res.status).toBe(500);
+    expect((await api(await signIn('acme'), 'GET', '/api/plan')).body.plan).toBe('free');
+  });
+});
+```
+
+Then add a second CI job to `.github/workflows/ci.yml`, so this runs on every push with the keys really absent from the server:
+```yaml
+  no-keys:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: make setup
+      - name: make dev (no OPENAI_API_KEY, no STRIPE_WEBHOOK_SECRET)
+        run: |
+          (make dev > dev.log 2>&1 &)
+          for i in $(seq 90); do curl -sf http://localhost:3000 > /dev/null && exit 0; sleep 2; done
+          cat dev.log; exit 1
+      - run: node scripts/with-env.mjs vitest run tests/gate.test.ts tests/no-keys.test.ts
+```
+Locally: start `npm run dev` in a terminal with both variables unset, then `npm test -- tests/no-keys.test.ts` → PASS (2 tests).
+
+- [ ] **Step 9: Commit**
 
 ```bash
-git add lib/server/billing.ts app/api/billing tests/unit/signature.test.ts tests/billing.test.ts
+git add lib/server/billing.ts app/api/billing tests/unit/signature.test.ts tests/billing.test.ts tests/no-keys.test.ts .github/workflows/ci.yml
 git commit -m "feat: verified, idempotent, order-safe Stripe webhook"
 ```
+
+---
+
+## Requirements check (plan review, 2026-10-07)
+
+An independent reviewer checked this phase against TECH_REQUIREMENTS, SCORING, SPEC, ARCHITECTURE and DESIGN. I verified each finding against those docs before accepting or rejecting it.
+
+| Requirement | Where in this phase | Proof |
+|---|---|---|
+| B1 / TECH §3: 400 on a bad signature, 200 otherwise | `verifyStripeSignature` on the raw bytes | `tests/unit/signature.test.ts` (real sample signatures, tampered and re-serialised bodies) |
+| B2: repeats ignored, including concurrent ones | `billing_events` primary key in the same transaction | billing "concurrent duplicate" test |
+| B3 / FR-9.4: older events never win; same-second cancellation wins | `apply_billing_event` | sample replay + `db.test.ts` |
+| FR-9.5: unknown company → 200, logged | `console.warn` | billing "ignores" test |
+| SCORING §4: works with the grader's own secret; `/api/plan` right after every event | re-signs with the server's secret; CI uses a non-sample secret | replay checks the whole `/api/plan` body after each event |
+| S7: no secret → 500, nothing changes | | unit test + `tests/no-keys.test.ts` in the CI `no-keys` job |
+
+**Changed after review:** a correctly signed but odd body (`null`, an array, a fractional `created`) now gets 200 instead of a 500 that Stripe would retry forever; the signature is checked over the exact bytes received; ignored and unknown-company events are logged; the S7 test and a second CI job without keys; whole-body `/api/plan` checks; the TS company list was dropped (the database is the one source of truth); interface names fixed in the plan index.
+
+**Rejected:** nothing.
+
+**Verdict:** ready to implement.

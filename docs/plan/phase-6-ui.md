@@ -1,10 +1,13 @@
 # Phase 6: UI
 
+> **In short:** Builds every screen in DESIGN.md (sign-in, search with editable filter chips, profile, shortlists, saved searches) in light and dark, for desktop and a 375 px phone.
+> Pages talk only to our own `/api` with the recruiter's sign-in token, so no secret key ever reaches the browser.
+
 Goal: every screen and state in [DESIGN.md](../DESIGN.md), in Graphite & Signal (light and dark), working on desktop and at 375 px. Pages are client components that call `/api` with the session token. Worth 20 points.
 
 **Rules for every task here:** the tokens from DESIGN §5 only (no raw colours in components); plain `<img>` for photos and logos; labels above inputs; every control keyboard-reachable; no em-dashes in copy; one name per action ("Shortlist", "Save search", "Upgrade").
 
-**How to verify UI tasks:** `npx next build` must pass (type-check), then check in the browser at **1280 px and 375 px wide**, in **light and dark** (OS setting or DevTools "prefers-color-scheme"), against the task's checklist. Take a screenshot of each for the Loom.
+**How to verify UI tasks:** `npm run build` must pass (type-check; it adds the Supabase env the pages need), then check in the browser at **1280 px and 375 px wide**, in **light and dark** (OS setting or DevTools "prefers-color-scheme"), against the task's checklist. Take a screenshot of each for the Loom.
 
 ---
 
@@ -51,12 +54,18 @@ Goal: every screen and state in [DESIGN.md](../DESIGN.md), in Graphite & Signal 
   --color-accent: var(--accent); --color-accent-fg: var(--accent-fg); --color-accent-soft: var(--accent-soft); --color-accent-line: var(--accent-line);
   --color-warn: var(--warn); --color-warn-soft: var(--warn-soft); --color-warn-line: var(--warn-line);
   --color-danger: var(--danger); --color-danger-soft: var(--danger-soft); --color-skeleton: var(--skeleton);
+  --color-overlay: rgb(0 0 0 / 0.45); /* dialog backdrop, same in both themes */
   --font-sans: var(--font-instrument), system-ui, sans-serif;
 }
 
-body { background: var(--bg); color: var(--ink); }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.skeleton { background: var(--skeleton); border-radius: 6px; animation: pulse 1.4s ease-in-out infinite; }
+/* In layers, so Tailwind utilities (rounded-full, outline-none) still win over these defaults. */
+@layer base {
+  body { background: var(--bg); color: var(--ink); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+}
+@layer components {
+  .skeleton { background: var(--skeleton); border-radius: 6px; animation: pulse 1.4s ease-in-out infinite; }
+}
 @keyframes pulse { 50% { opacity: .55; } }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
@@ -117,6 +126,7 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
     throw new ApiError(0, "We couldn't reach the server. Check your connection and try again.");
   }
   const json = await res.json().catch(() => null);
+  if (res.status === 401) await supabase.auth.signOut(); // expired session: the layout guard sends them to sign-in
   if (!res.ok) throw new ApiError(res.status, json?.error ?? 'Something went wrong. Please try again.');
   return json as T;
 }
@@ -135,18 +145,16 @@ const VARIANTS = {
   quiet: 'text-muted hover:text-ink',
 } as const;
 
+// 44 px tall on phones (SCORING: tap targets >= 44 px), 36 px from md up.
+export const buttonClass = (variant: keyof typeof VARIANTS = 'secondary', className?: string) => cx(
+  'inline-flex min-h-11 md:min-h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm font-medium transition active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50',
+  VARIANTS[variant],
+  className,
+);
+
 // ComponentProps<'button'> includes `ref` in React 19, so callers can pass one without forwardRef.
 export function Button({ variant = 'secondary', className, ...props }: ComponentProps<'button'> & { variant?: keyof typeof VARIANTS }) {
-  return (
-    <button
-      {...props}
-      className={cx(
-        'inline-flex min-h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm font-medium transition active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50',
-        VARIANTS[variant],
-        className,
-      )}
-    />
-  );
+  return <button {...props} className={buttonClass(variant, className)} />;
 }
 
 export function Skeleton({ className }: { className?: string }) {
@@ -219,7 +227,7 @@ export function TopBar() {
         </nav>
         <div className="ml-auto flex items-center gap-3">
           <PlanStatus />
-          <Button variant="quiet" aria-label="Sign out" onClick={() => supabase.auth.signOut()} className="px-1"><SignOut size={18} /></Button>
+          <Button variant="quiet" aria-label="Sign out" onClick={() => supabase.auth.signOut()} className="min-w-11 px-1"><SignOut size={18} /></Button>
         </div>
       </div>
     </header>
@@ -233,7 +241,7 @@ function PlanStatus() {
   const n = plan.searches_remaining ?? 0;
   return (
     <div className="flex items-center gap-2 text-sm">
-      <span className="text-muted"><span className="hidden sm:inline">Free plan, </span>{n} {n === 1 ? 'search' : 'searches'} left</span>
+      <span className="text-muted"><span className="hidden sm:inline">Free plan · </span>{n} {n === 1 ? 'search' : 'searches'} left</span>
       <Button variant="secondary" onClick={openUpgrade} className="border-accent text-accent">Upgrade</Button>
     </div>
   );
@@ -272,7 +280,7 @@ function UpgradeDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/45" />
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-overlay" />
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(92vw,440px)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-line bg-surface p-6 shadow-2xl">
           <Dialog.Title className="text-lg font-semibold">Upgrade to the paid plan</Dialog.Title>
           <Dialog.Description className="mt-1 text-sm text-muted">Unlimited searches for everyone at your company.</Dialog.Description>
@@ -385,10 +393,10 @@ export default function SearchPage() {
 
 ```bash
 rm app/page.tsx
-npx next build
+npm run build
 npm run dev
 ```
-Checklist: `/` while signed out → redirects to `/sign-in`; a wrong password → "That email and password do not match."; sign in as acme → top bar shows **"Free plan, 1 search left"** + **Upgrade**; Upgrade opens the dialog, Esc closes it; at 375 px the bottom nav shows Search / Shortlists / Saved; sign out returns to `/sign-in`; dark mode uses the dark tokens.
+Checklist: `/` while signed out → redirects to `/sign-in`; a wrong password → "That email and password do not match."; sign in as acme → top bar shows **"Free plan · 1 search left"** + **Upgrade**; Upgrade opens the dialog, Esc closes it; at 375 px the bottom nav shows Search / Shortlists / Saved; sign out returns to `/sign-in`; dark mode uses the dark tokens.
 
 - [ ] **Step 9: Commit**
 
@@ -556,7 +564,7 @@ export function ChipBar({ filters, onChange, disabled }: Props) {
 function RemoveButton({ label, onClick, disabled }: { label: string; onClick: () => void; disabled?: boolean }) {
   return (
     <button type="button" aria-label={`Remove ${label}`} disabled={disabled} onClick={onClick}
-      className="grid size-7 place-items-center rounded-full text-muted hover:text-ink"><X size={12} weight="bold" /></button>
+      className="-my-2 grid size-11 place-items-center rounded-full text-muted hover:text-ink md:my-0 md:size-7"><X size={12} weight="bold" /></button>
   );
 }
 
@@ -577,7 +585,7 @@ function ChipView({ chip, filters, onChange, disabled }: { chip: Chip } & Props)
     <span className={cx(CHIP, 'border-border bg-surface pl-3', open && 'border-accent ring-2 ring-accent/20')}>
       <Popover.Root open={open} onOpenChange={setOpen}>
         <Popover.Trigger asChild disabled={disabled || !editable}>
-          <button type="button" className="py-1" aria-label={editable ? `Change ${name}` : name}>
+          <button type="button" className="min-h-11 py-1 md:min-h-0" aria-label={editable ? `Change ${name}` : name}>
             {chip.label && <span className="text-muted">{chip.label} </span>}{chip.text}
           </button>
         </Popover.Trigger>
@@ -611,7 +619,7 @@ function OptionPicker({ listKey, selected, onPick }: { listKey: ListKey; selecte
         {options.map((o) => (
           <li key={o}>
             <button type="button" onClick={() => onPick(o)}
-              className={cx('flex w-full justify-between rounded-md px-2.5 py-1.5 text-left text-sm hover:bg-bg', o === selected && 'bg-accent-soft font-medium text-accent')}>
+              className={cx('flex min-h-11 w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-sm hover:bg-bg md:min-h-0', o === selected && 'bg-accent-soft font-medium text-accent')}>
               {display(listKey, o)}{o === selected && <span aria-hidden>✓</span>}
             </button>
           </li>
@@ -659,7 +667,7 @@ function AddFilter({ filters, onChange, disabled }: Props) {
   return (
     <Popover.Root open={open} onOpenChange={(o) => { setOpen(o); if (!o) setStep(null); }}>
       <Popover.Trigger asChild disabled={disabled}>
-        <button type="button" className={cx(CHIP, 'border-dashed border-border px-3 py-1 text-muted hover:text-ink')}>
+        <button type="button" className={cx(CHIP, 'min-h-11 border-dashed border-border px-3 py-1 text-muted hover:text-ink md:min-h-0')}>
           <Plus size={12} weight="bold" className="mr-1" />Filter
         </button>
       </Popover.Trigger>
@@ -689,7 +697,7 @@ function AddFilter({ filters, onChange, disabled }: Props) {
 
 - [ ] **Step 6: Verify and commit**
 
-Run: `npx next build` (type-check). The chips are exercised in the browser in Task 15.
+Run: `npm run build` (type-check). The chips are exercised in the browser in Task 15.
 ```bash
 git add components/search tests/unit/chips.test.ts
 git commit -m "feat: editable filter chips"
@@ -723,6 +731,7 @@ const EXAMPLES = [
 ];
 
 export function FirstVisit({ onPick, freeLeft }: { onPick: (brief: string) => void; freeLeft: number | null }) {
+  if (freeLeft === 0) return null; // the plan banner explains; examples would fill a disabled box
   return (
     <div className="mt-8 max-w-2xl">
       <h2 className="text-lg font-semibold">Describe the people you want, in plain English.</h2>
@@ -783,8 +792,8 @@ export function NoResults({ filters, onClear }: { filters: Filters; onClear: () 
     title = "Part of your brief isn't in our data, so we're not guessing.";
     body = 'Remove the highlighted filter to see results without it.';
   } else if (real === 0) {
-    title = 'No filters left.';
-    body = 'Add a filter, or describe who you want above.';
+    title = "There's nothing to search for yet.";
+    body = 'We found no role, skill, city, seniority, experience or education in that. Add a filter, or describe who you want above.';
   } else {
     title = `No one matches all ${real} filters.`;
     body = "Remove a filter above to widen the search. Each change re-runs instantly and doesn't use a search.";
@@ -852,6 +861,10 @@ import type { Filters } from '@/lib/shared/filters';
 
 type Status = 'idle' | 'searching' | 'refining' | 'done' | 'error';
 
+// The brief that produced a search, kept per tab so a restored search can still be saved. Storage may be blocked: ignore.
+const rememberBrief = (id: string, brief: string) => { try { sessionStorage.setItem(`brief:${id}`, brief); } catch {} };
+const readBrief = (id: string) => { try { return sessionStorage.getItem(`brief:${id}`) ?? ''; } catch { return ''; } };
+
 export default function SearchPage() {
   return <Suspense><SearchView /></Suspense>;
 }
@@ -872,7 +885,9 @@ function SearchView() {
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const lastRequest = useRef<{ body: object; kind: 'searching' | 'refining' } | null>(null);
   const startedFromSaved = useRef(false);
+  const restored = useRef<string | null>(null);
   const outOfSearches = plan?.plan === 'free' && plan.searches_remaining === 0;
+  const savable = Boolean(searchedBrief && result && Object.keys(result.filters).length && !result.filters.unsupported);
 
   const run = useCallback(async (body: object, kind: 'searching' | 'refining', label: string) => {
     lastRequest.current = { body, kind };
@@ -880,6 +895,10 @@ function SearchView() {
     try {
       const r = await api<SearchResponse>('/api/search', { method: 'POST', body });
       setResult(r); setRows(r.results); setPage(1); setSearchedBrief(label); setStatus('done'); setMoreState('idle');
+      // Keep the search in the URL: leaving the page or reloading brings it back, so a free user can still refine it.
+      restored.current = r.search_id;
+      rememberBrief(r.search_id, label);
+      router.replace(`/?search=${r.search_id}`, { scroll: false });
     } catch (e) {
       const err = e as ApiError;
       if (err.status === 402) { openUpgrade(); setStatus(result ? 'done' : 'idle'); }
@@ -887,7 +906,21 @@ function SearchView() {
     } finally {
       refreshPlan().catch(() => {});
     }
-  }, [openUpgrade, refreshPlan, result]);
+  }, [openUpgrade, refreshPlan, result, router]);
+
+  // Restore /?search=<id> (after navigating away, or a reload). Paging never uses a search.
+  useEffect(() => {
+    const id = params.get('search');
+    if (!id || restored.current === id) return;
+    restored.current = id;
+    setStatus('refining');
+    api<PageResponse>(`/api/search/${id}?page=1`)
+      .then((r) => {
+        setResult({ search_id: id, filters: r.filters, total: r.total, results: r.results, searches_remaining: null });
+        setRows(r.results); setPage(1); setSearchedBrief(readBrief(id)); setStatus('done');
+      })
+      .catch(() => { setStatus('idle'); router.replace('/'); });
+  }, [params, router]);
 
   // Re-run a saved search: /?saved=<id>&brief=<text> (from the Saved searches page). Guarded for React StrictMode.
   useEffect(() => {
@@ -927,15 +960,17 @@ function SearchView() {
           className="flex items-center gap-2 rounded-xl border border-border bg-surface p-1.5 pl-3 focus-within:border-accent">
           <label htmlFor="brief" className="sr-only">Describe who you&apos;re looking for</label>
           <input id="brief" value={brief} maxLength={500} onChange={(e) => setBrief(e.target.value)} disabled={outOfSearches}
-            placeholder={outOfSearches ? 'New searches need the paid plan' : "Describe who you're looking for…"}
+            aria-describedby={outOfSearches ? 'brief-help' : undefined} placeholder="Describe who you're looking for…"
             className="min-w-0 flex-1 bg-transparent py-1.5 outline-none placeholder:text-muted" />
           <Button type="submit" variant="primary" disabled={outOfSearches || status === 'searching' || !brief.trim()}>
             {status === 'searching' ? 'Searching…' : 'Search'}
           </Button>
         </form>
+        {outOfSearches && <p id="brief-help" className="mt-1.5 text-sm text-muted">New searches need the paid plan. You can still change the filters of your last search.</p>}
 
         {status === 'idle' && !result && <FirstVisit onPick={setBrief} freeLeft={plan?.plan === 'free' ? plan.searches_remaining : null} />}
         {status === 'searching' && <SearchingSkeleton />}
+        {status === 'refining' && !result && <RowSkeletons />}
         {status === 'error' && error && (
           <ErrorBar message={error} onRetry={lastRequest.current ? () => run(lastRequest.current!.body, lastRequest.current!.kind, searchedBrief || brief) : undefined} />
         )}
@@ -947,7 +982,8 @@ function SearchView() {
               <span className="text-muted" aria-live="polite">
                 {status === 'refining' ? 'Updating…' : `${result.total} ${result.total === 1 ? 'person matches' : 'people match'} all filters`}
               </span>
-              <Button onClick={save} disabled={saveState === 'saving' || saveState === 'saved'}>
+              {/* Only a search that can return people is worth saving: a re-run uses a search (FR-7.2). */}
+              <Button onClick={save} disabled={!savable || saveState === 'saving' || saveState === 'saved'}>
                 {saveState === 'saved' ? 'Saved' : saveState === 'error' ? 'Try saving again' : 'Save search'}
               </Button>
             </div>
@@ -958,6 +994,7 @@ function SearchView() {
                     <ResultRow key={c.id} candidate={c} filters={result.filters} selected={openId === c.id} onOpen={() => setOpenId(c.id)} />
                   ))}
                 </ul>
+                {moreState === 'loading' && <RowSkeletons rows={3} />}
                 {rows.length < result.total && (
                   <Button onClick={loadMore} disabled={moreState === 'loading'} className="w-full">
                     {moreState === 'loading' ? 'Loading…' : moreState === 'error' ? 'Try again' : `Show more (${rows.length} of ${result.total})`}
@@ -978,11 +1015,11 @@ function SearchView() {
 
 Fresh state: `npm run db:setup`, `npm run dev`, sign in as acme.
 Checklist:
-1. First visit shows the prompt, three examples and "Free plan: 1 search included"; clicking an example **only fills** the box.
+1. First visit shows the prompt, three examples and "Free plan: 1 search included"; clicking an example **only fills** the box. After the free search the examples are hidden and a visible line under the box explains why it is disabled.
 2. Search "senior React engineers in New York who have worked at a startup" → "Reading your brief…" + skeletons → chips **Seniority Senior · City New York · Skill React · Worked at a startup** and **21 people match all filters**; React is highlighted on each row.
-3. The top bar now says **0 searches left**, and the **free-search banner** appears; the brief box is disabled with "New searches need the paid plan".
+3. The top bar now says **0 searches left**, and the **free-search banner** appears; the brief box is disabled with the helper line "New searches need the paid plan…".
 4. Click the City chip → searchable list of 10 cities → pick Boston → the results update **without** using a search (still 0 left, no 402).
-5. Remove chips until none are left → "No filters left."; Clear filters works.
+5. Remove chips until none are left → "There's nothing to search for yet."; Clear filters works. Go to Shortlists and back, then reload: the same search, chips and results come back (no search used) and can still be refined.
 6. Type a brief like "product managers who speak Japanese" (set acme to paid first via `admin()` or SQL) → amber chip "speaks Japanese · not in our data"; removing it shows product managers.
 7. Show more loads the next 20; Save search → "Saved".
 8. At 375 px: chips scroll sideways in one row; nothing overflows horizontally.
@@ -1005,7 +1042,7 @@ git commit -m "feat: search page with chips, states, paging and save"
 
 **Interfaces:**
 - Consumes: `useAppState().lists/refreshLists`, `api`.
-- Produces: `<ShortlistButton candidateId compact? />`, `<ProfilePanel id highlight onClose />`; `type Person` (the original candidate record).
+- Produces: `<ShortlistButton candidateId name compact? block? />`, `<ProfilePanel id highlight onClose />`; `type Person` (the original candidate record).
 
 - [ ] **Step 1: Write `components/ShortlistButton.tsx`**
 
@@ -1082,8 +1119,9 @@ export function ShortlistButton({ candidateId, name, compact, block }: { candida
 
 ```tsx
 'use client';
+import * as Dialog from '@radix-ui/react-dialog';
 import { X } from '@phosphor-icons/react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { api } from '@/lib/client/api';
 import { ShortlistButton } from './ShortlistButton';
 import { Button, Skeleton, cx } from './ui';
@@ -1095,32 +1133,42 @@ export type Person = {
   education: { school: string; degree: string; field: string; graduation_year: number }[];
 };
 
-/** Docked beside the list on desktop; a full-height sheet on a phone (DESIGN §4.1). */
+const PHONE = '(max-width: 767px)';
+const usePhone = () => useSyncExternalStore(
+  (onChange) => { const m = matchMedia(PHONE); m.addEventListener('change', onChange); return () => m.removeEventListener('change', onChange); },
+  () => matchMedia(PHONE).matches,
+  () => false,
+);
+
+/**
+ * Desktop: docked beside the list, which stays usable (focus is not moved, Esc closes).
+ * Phone: a full-screen modal dialog (Radix traps focus, closes on Esc, returns focus to the row) (DESIGN §4.1, §7).
+ */
 export function ProfilePanel({ id, highlight, onClose }: { id: string; highlight: Set<string>; onClose: () => void }) {
+  const phone = usePhone();
   const [person, setPerson] = useState<Person | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     let live = true;
     setPerson(null); setError(null);
     api<Person>(`/api/people/${id}`).then((p) => live && setPerson(p)).catch((e) => live && setError(e.message));
-    closeRef.current?.focus();
     return () => { live = false; };
   }, [id]);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    if (phone) return; // Radix handles Esc on the phone dialog
+    // defaultPrevented: Esc that only closed a popover inside the panel (Radix prevents it) must not close the panel too.
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !e.defaultPrevented) onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [onClose, phone]);
 
-  return (
-    <aside aria-label="Candidate profile"
-      className="fixed inset-0 z-30 overflow-y-auto bg-surface p-5 md:sticky md:top-14 md:z-0 md:h-[calc(100dvh-3.5rem)] md:w-[380px] md:shrink-0 md:border-l md:border-line">
+  const body = (
+    <>
       <div className="flex items-start justify-between">
         {person ? <img src={person.avatar_url} alt="" width={56} height={56} className="size-14 rounded-full bg-line" /> : <Skeleton className="size-14 rounded-full" />}
-        <Button ref={closeRef} variant="quiet" aria-label="Close profile" onClick={onClose} className="px-1"><X size={20} /></Button>
+        <Button variant="quiet" aria-label="Close profile" onClick={onClose} className="min-w-11 px-1"><X size={20} /></Button>
       </div>
       {error && <p role="alert" className="mt-4 text-danger">{error}</p>}
       {!person && !error && <div className="mt-4 space-y-3" aria-busy="true"><Skeleton className="h-5 w-40" /><Skeleton className="h-4 w-60" /><Skeleton className="h-24 w-full" /></div>}
@@ -1163,11 +1211,29 @@ export function ProfilePanel({ id, highlight, onClose }: { id: string; highlight
           </div>
         </>
       )}
+    </>
+  );
+
+  if (phone) {
+    return (
+      <Dialog.Root open onOpenChange={(open) => { if (!open) onClose(); }}>
+        <Dialog.Portal>
+          <Dialog.Content aria-describedby={undefined} className="fixed inset-0 z-30 overflow-y-auto bg-surface p-5">
+            <Dialog.Title className="sr-only">Candidate profile</Dialog.Title>
+            {body}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+    );
+  }
+  return (
+    <aside aria-label="Candidate profile"
+      className="sticky top-14 h-[calc(100dvh-3.5rem)] w-[380px] shrink-0 overflow-y-auto border-l border-line bg-surface p-5">
+      {body}
     </aside>
   );
 }
 ```
-Note: `ref={closeRef}` works because `Button` takes `ComponentProps<'button'>` (which includes `ref` in React 19) and spreads it onto `<button>`.
 
 - [ ] **Step 3: Wire them into `app/(app)/page.tsx`**
 
@@ -1191,7 +1257,7 @@ Replace the `{/* Task 16 … */}` comment with:
 
 - [ ] **Step 4: Verify**
 
-Checklist: every row has **+ Shortlist** (desktop) or a 44 px **+** (phone); the popover lists lists, creates "Frontend NYC" and adds the person; the row then shows **✓ Shortlisted**; clicking a name docks the profile on the right at 1280 px (the list stays clickable; clicking another person swaps the profile) and opens a full-screen sheet at 375 px; Esc and × close it; experience shows logos, education and skills (matched ones highlighted).
+Checklist: every row has **+ Shortlist** (desktop) or a 44 px **+** (phone); the popover lists lists, creates "Frontend NYC" and adds the person; the row then shows **✓ Shortlisted**; clicking a name docks the profile on the right at 1280 px (the list stays clickable and keeps focus; clicking another person swaps the profile) and opens a full-screen dialog at 375 px (Tab stays inside it; closing returns focus to the row); Esc and × close it; Esc inside the Shortlist popover closes only the popover; experience shows logos, education and skills (matched ones highlighted).
 
 - [ ] **Step 5: Commit**
 
@@ -1225,7 +1291,7 @@ export function ConfirmDialog({ open, title, body, confirmLabel, onConfirm, onOp
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/45" />
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-overlay" />
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(92vw,400px)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-line bg-surface p-6 shadow-2xl">
           <Dialog.Title className="font-semibold">{title}</Dialog.Title>
           <Dialog.Description className="mt-1 text-sm text-muted">{body}</Dialog.Description>
@@ -1262,7 +1328,7 @@ import { useState } from 'react';
 import { useAppState } from '@/components/app-shell';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { EmptyState } from '@/components/EmptyState';
-import { Button, Skeleton } from '@/components/ui';
+import { Button, Skeleton, buttonClass } from '@/components/ui';
 import { api } from '@/lib/client/api';
 
 export default function ShortlistsPage() {
@@ -1292,7 +1358,7 @@ export default function ShortlistsPage() {
       {lists === null && <div className="mt-6 space-y-2"><Skeleton className="h-12 w-full" /><Skeleton className="h-12 w-full" /></div>}
       {lists?.length === 0 && (
         <EmptyState title="No shortlists yet." body="Shortlist someone from search results, or create an empty list to fill later.">
-          <Link href="/"><Button variant="primary">Go to search</Button></Link>
+          <Link href="/" className={buttonClass('primary')}>Go to search</Link>
         </EmptyState>
       )}
       {lists && lists.length > 0 && (
@@ -1340,7 +1406,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { ProfilePanel } from '@/components/ProfilePanel';
 import { ResultRow } from '@/components/search/ResultRow';
 import { ErrorBar, RowSkeletons } from '@/components/search/states';
-import { Button } from '@/components/ui';
+import { Button, buttonClass } from '@/components/ui';
 import { api } from '@/lib/client/api';
 import type { CandidateCard } from '@/lib/server/search';
 
@@ -1368,7 +1434,7 @@ export default function ShortlistPage({ params }: { params: Promise<{ id: string
         {!list && !error && <RowSkeletons rows={4} />}
         {list?.people.length === 0 && (
           <EmptyState title="Nobody on this list yet." body="Shortlist people from search results.">
-            <Link href="/"><Button variant="primary">Go to search</Button></Link>
+            <Link href="/" className={buttonClass('primary')}>Go to search</Link>
           </EmptyState>
         )}
         {list && list.people.length > 0 && (
@@ -1398,7 +1464,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { EmptyState } from '@/components/EmptyState';
 import { chipsOf } from '@/components/search/chip-model';
 import { ErrorBar } from '@/components/search/states';
-import { Button, Skeleton } from '@/components/ui';
+import { Button, Skeleton, buttonClass } from '@/components/ui';
 import { api } from '@/lib/client/api';
 import type { Filters } from '@/lib/shared/filters';
 
@@ -1423,7 +1489,7 @@ export default function SavedPage() {
       {saved === null && !error && <div className="mt-6 space-y-2"><Skeleton className="h-16 w-full" /><Skeleton className="h-16 w-full" /></div>}
       {saved?.length === 0 && (
         <EmptyState title="No saved searches yet." body="Run a search, then press Save search next to the results.">
-          <Link href="/"><Button variant="primary">Go to search</Button></Link>
+          <Link href="/" className={buttonClass('primary')}>Go to search</Link>
         </EmptyState>
       )}
       {saved && saved.length > 0 && (
@@ -1472,6 +1538,8 @@ git commit -m "feat: shortlists and saved searches pages"
 
 Use the DESIGN.md §1 table as the checklist: (1) chips visible and easy to correct; (2) loading, empty and error states (force an error by stopping `npm run dev` mid-session, or by sending a brief with the key unset); (3) search, results and shortlists on a phone; (4) plan limit and Upgrade clear; (5) shortlist and save obvious. Screenshot each state for the Loom.
 
+At 375 px, measure tap targets in DevTools (select the element, read its box): every button, chip, chip ×, + Filter, Shortlist and nav item is **at least 44 × 44 px** (SCORING UI check 3). Reload in the middle of a refined search: it must come back with its chips. Let the session expire (or sign out in another tab) and click something: you land on sign-in, not an error.
+
 - [ ] **Step 2: Keyboard and screen-reader basics**
 
 Tab through the search page: brief → Search → each chip → its × → + Filter → Clear filters → Save search → each row → Shortlist. Visible focus everywhere; Esc closes popovers, dialogs and the profile; every icon-only button has an `aria-label`.
@@ -1482,7 +1550,7 @@ Search the UI code for em-dashes and en-dashes: `grep -rn "[—–]" app compone
 
 - [ ] **Step 4: Design review with the user**
 
-Share the screenshots; apply the feedback; re-run `npm test` (the API must still pass) and `npx next build`.
+Share the screenshots; apply the feedback; re-run `npm test` (the API must still pass) and `npm run build`.
 
 - [ ] **Step 5: Commit**
 
@@ -1490,3 +1558,25 @@ Share the screenshots; apply the feedback; re-run `npm test` (the API must still
 git add -A app components
 git commit -m "fix: UI review pass (phone, dark, keyboard, copy)"
 ```
+
+---
+
+## Requirements check (plan review, 2026-10-07)
+
+An independent reviewer checked this phase against TECH_REQUIREMENTS, SCORING, SPEC, ARCHITECTURE and DESIGN. I verified each finding against those docs before accepting or rejecting it.
+
+| Requirement | Where in this phase | Proof |
+|---|---|---|
+| UI 1: see the filters and correct them easily, also on the free plan after the one search | ChipBar (Task 14); search kept in the URL (Task 15) | Task 15 checklist 4–5 (incl. leave and reload) |
+| UI 2: loading, empty and error states | `states.tsx`, paging skeleton | Task 15 checklist, Task 18 Step 1 |
+| UI 3: works on a phone (no sideways scroll, taps ≥ 44 px, profile as a sheet) | 44 px phone sizes; profile is a real dialog on phones | Task 18 Step 1 measurement |
+| UI 4: plan limit and Upgrade clear | PlanStatus, PlanBanner, UpgradeDialog, visible helper line | Task 13 + 15 checklists |
+| UI 5: shortlist and save obvious | ShortlistButton on every row, Save search | Task 16 + 17 checklists |
+| Security: only the URL and publishable key in the browser | `lib/client/supabase.ts` | Task 19 secret scan |
+| DESIGN §7: focus visible, dialogs trap focus and close on Esc | CSS in layers; Radix dialogs | Task 18 Step 2 |
+
+**Changed after review:** global CSS moved into layers so Tailwind classes win (round skeletons, no double focus ring); the current search lives in the URL so leaving or reloading doesn't lose it; 44 px tap targets on phones; build checks use `npm run build` (plain `next build` has no Supabase env); the phone profile is a Radix dialog; Esc in a popover no longer closes the profile; desktop focus no longer jumps; an expired session signs out; clearer copy for "nothing to search for"; examples hidden when no searches are left; visible helper text under the disabled box; skeleton rows while paging; links styled as buttons (no button inside a link); overlay colour is a token; "Free plan · 1 search left" matches DESIGN.
+
+**Rejected:** making the remaining filter types addable from "+ Filter" (at most years, any-of skills, current company, current company type). They can still be edited or removed when the AI sets them, and the rubric asks that filters can be corrected easily, which the 11 addable types cover.
+
+**Verdict:** ready to implement.

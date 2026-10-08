@@ -99,6 +99,26 @@ The prompt that passed (the rules worth keeping):
 | *Architecture review:* 2.5 s AI timeout · saved re-run via brief + filters · search query built in Node | All three re-raised from Section 2/3 reviews; decisions unchanged (see those rows). No new arguments: a 2.5 s cutoff trades accuracy (25 pts) for speed (5 pts); the ID re-run runs exactly what was saved; 5k rows make the fixed SQL function a few ms, and the speed test proves it |
 | *Architecture review:* `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` is "a typo that crashes supabase-js" | Rejected: supabase-js never reads env vars (we pass the value to `createClient`), so the name is ours. "Publishable" is Supabase's current name for the public key (it replaces "anon"), and Supabase's own Next.js docs use this variable name. To check at scaffold: the exact field names `supabase status -o env` prints in CLI 2.119.0 |
 
+### Plan review (7 independent reviewers, one per phase, 2026-10-07)
+
+Every phase was reviewed against TECH_REQUIREMENTS, SCORING, SPEC, ARCHITECTURE and DESIGN. No critical issues. Each phase file now ends with a "Requirements check" section listing what changed and what was rejected, and why. The main changes:
+
+| Finding | Outcome |
+|---|---|
+| `cleanFilters` rejected a whole object for one odd value (502 on odd model output, 400 for odd contract filters) | Accepted. Anything unusable becomes `unsupported` (FR-2.3); TECH L7 reworded to match |
+| Security tests passed on *any* error, and skipped some tables and verbs | Accepted. Every table × insert/update/delete must give `42501`, with a full before/after snapshot |
+| Concurrent billing events for one company could set the wrong plan | Accepted. The company row is locked; both companies are recomputed |
+| A late failure (page 1) after a search was marked done wasn't refunded | Accepted. Page 1 runs before `complete_search` |
+| Mac setup could fail on Supabase analytics | Accepted. Unused Supabase services turned off |
+| S7 (no keys) was never tested in CI | Accepted. `tests/no-keys.test.ts` plus a second CI job |
+| A free user lost their search on navigation or reload | Accepted. Search id kept in the URL and restored |
+| Tap targets under 44 px on phones | Accepted |
+| Mac zip would have shared the brief (`docs/`) | Accepted. Zip excludes `docs/`; no collaborator |
+| Secret scan only checked the production build, but graders run `make dev` | Accepted. It also scans the running dev server |
+| README numbers came from the throwaway prompt | Accepted. Measured again in Task 19 |
+| Non-default Supabase ports; a `service_role` text pattern; 400 on saving a search that can't return anyone; more "+ Filter" types | Rejected (reasons in the phase files) |
+| A free recruiter can skip the quota by calling `search_candidates` or reading `candidates` directly through Supabase | **Open: user decision** |
+
 ## 5. Where the data lives: Supabase facts from the brief
 
 We build our own Supabase **on the local machine**. Nothing exists anywhere until our setup creates it.

@@ -42,7 +42,7 @@ supabase/
   migrations/                 tables, RLS, grants, SQL functions (data layer)
 scripts/
   setup-data.mjs              create the two recruiters, load candidates.json, build the allowed-value lists
-  env.mjs                     reads `supabase status -o env` → env vars for Next.js
+  supabase-env.mjs            reads `supabase status -o json` → env vars for Next.js (dev.mjs, with-env.mjs use it)
 lib/
   server/                     supabase.ts · auth.ts · llm.ts · filters.ts · search.ts · billing.ts · http.ts
   shared/
@@ -211,7 +211,7 @@ node scripts/setup-data.mjs                (via the admin API: create both recru
                                             load all 5,000 candidates; write lib/shared/vocab.ts)
 ```
 ### 9.2 `make dev`
-`node scripts/env.mjs` exports the Supabase values from `supabase status`, then runs `next dev -p 3000` with the grader's `OPENAI_API_KEY` / `STRIPE_WEBHOOK_SECRET` passed through.
+`node scripts/dev.mjs` reads the Supabase values from `supabase status` (via `scripts/supabase-env.mjs`), then runs `next dev -p 3000` with the grader's `OPENAI_API_KEY` / `STRIPE_WEBHOOK_SECRET` passed through.
 
 ### 9.3 `make test` (each mirrors a graded area)
 | Check | Proves |
