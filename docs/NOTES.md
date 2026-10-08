@@ -139,6 +139,17 @@ We build our own Supabase **on the local machine**. Nothing exists anywhere unti
 
 ## 6. Before implementation
 
-- [ ] Install **Node 24** (currently 22.18) and **`make`** on this machine
-- [ ] Decide where to start (the agreed priority order is in [SCORING.md](SCORING.md))
+- [x] Install **Node 24** (currently 22.18) and **`make`** on this machine
+- [x] Decide where to start (the agreed priority order is in [SCORING.md](SCORING.md))
 - [ ] Before submission: send the collaborator invite to `gibbsdylan`
+
+## 7. Final measurements (Task 19, 2026-10-08, final prompt, `gpt-4.1-mini-2025-04-14`)
+
+| What | Result | How measured |
+|---|---|---|
+| Accuracy | 10/10 samples exact: P = R = F1 = P@20 = 1.000; 17 extra briefs pass | `tests/accuracy.test.ts` (POST, page to the end) |
+| New search | p95 1.49 s (grader allows 3 s); five demo briefs 1.4 to 2.0 s | `tests/speed.test.ts` |
+| Paging | p95 69 ms (grader allows 300 ms) | `tests/speed.test.ts` |
+| Tokens per search | ~2,200 input (2,048 cached), ~90 output | `LOG_LLM_USAGE=1`, five searches |
+| Cost per search | **≈ $0.0004** (≈ $0.001 when the cache is cold) | $0.40 / $0.10 cached / $1.60 output per 1M tokens, checked on OpenAI's model page 2026-10-08 |
+| Secrets in the browser | 0 leaks in 56 build files and 86 files served by the dev server | `scripts/check-secrets.mjs` (also in CI) |

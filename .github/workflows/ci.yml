@@ -27,6 +27,11 @@ jobs:
           cat dev.log; exit 1
       - name: make test
         run: make test
+      - name: scan what the running dev server sends, then the production build, for leaked secrets
+        run: |
+          node scripts/with-env.mjs node scripts/check-secrets.mjs http://localhost:3000
+          npm run build
+          node scripts/with-env.mjs node scripts/check-secrets.mjs
       - name: show the server log on failure
         if: failure()
         run: cat dev.log

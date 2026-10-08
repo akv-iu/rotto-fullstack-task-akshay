@@ -16,7 +16,12 @@ const samples: { brief: string; expected_ids: string[] }[] = JSON.parse(readFile
 const extra: { brief: string; expect?: Record<string, unknown>; zero?: boolean }[] = JSON.parse(readFileSync('tests/briefs.extra.json', 'utf8'));
 
 let token: string;
+// Row counts before any brief runs. Searches only ever add `searches` rows, so every other table must end up identical.
+const TABLES = ['candidates', 'companies', 'recruiters', 'shortlists', 'shortlist_members', 'saved_briefs', 'subscriptions', 'billing_events'];
+const counts = async () => Object.fromEntries(await Promise.all(TABLES.map(async (t) => [t, (await admin().from(t).select('*', { count: 'exact', head: true })).count])));
+let before: Record<string, unknown>;
 beforeAll(async () => {
+  before = await counts();
   await admin().from('companies').update({ plan: 'paid' }).eq('id', COMPANY.acme); // unlimited searches for the eval
   token = await signIn('acme');
 });
@@ -59,8 +64,9 @@ describe.runIf(hasKey)('accuracy (the grader\'s method)', () => {
   });
 
   it('hostile briefs changed no data (X4)', async () => {
-    const db = admin();
-    expect((await db.from('candidates').select('id', { count: 'exact', head: true })).count).toBe(5000);
-    expect((await db.from('companies').select('slug').order('slug')).data).toEqual([{ slug: 'acme' }, { slug: 'globex' }]);
+    expect(await counts()).toEqual(before);
+    expect(Object.values(before).every((n) => typeof n === 'number')).toBe(true); // a mistyped table would compare null to null
+    expect(before.candidates).toBe(5000);
+    expect((await admin().from('companies').select('slug').order('slug')).data).toEqual([{ slug: 'acme' }, { slug: 'globex' }]);
   });
 });
