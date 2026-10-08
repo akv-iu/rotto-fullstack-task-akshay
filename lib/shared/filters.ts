@@ -17,7 +17,7 @@ export type Filters = {
   schools?: string[];
   min_years?: number;
   max_years?: number;
-  open_to_work?: true;
+  open_to_work?: boolean; // true: only people open to work; false: only people who are not
   worked_at_company_type?: CompanyType; // any job in the history
   current_company_type?: CompanyType;
   unsupported?: Unsupported[]; // non-empty → zero results
@@ -97,7 +97,7 @@ export function cleanFilters(input: unknown): { filters: Filters; runnable: bool
       if (key === 'min_years' ? y > 0 : y < MAX_YEARS) filters[key] = y; // 0+ and 15- years mean "anyone": dropped
     } else if (key === 'open_to_work') {
       if (typeof value !== 'boolean') reject(show(key, value));
-      else if (value) filters.open_to_work = true;
+      else filters.open_to_work = value;
     } else if (key === 'worked_at_company_type' || key === 'current_company_type') {
       const t = companyType.safeParse(value);
       if (t.success) filters[key] = t.data;

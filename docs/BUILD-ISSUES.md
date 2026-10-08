@@ -203,6 +203,29 @@ Filters nested 5,000 levels deep overflowed the call stack, which was also a 500
 
 ---
 
+## 18. "Not open to work" returned the wrong people
+
+**Found in the brief-by-brief audit, with briefs the tests had never seen.** "staff engineers who are not open to work" returned all 1,136 staff engineers. The right answer is 813, so 28% of the results were wrong (the brief scores "how many of the people you returned were right").
+
+**Cause:** the filter could only say "open to work = yes". The model had no way to say "no", so it dropped the condition. The data does record it for everyone: 1,510 open, 3,490 not.
+
+**Fix:**
+- **The model's answer is now a choice:** `"open"`, `"not_open"` or null, instead of a boolean. "Not open" has to be a deliberate answer and can never come from a default `false`; a plain `false` used to mean "not mentioned".
+- **Conversion:** `lib/server/llm.ts` maps the choice to `true`/`false`.
+- **Checker:** `cleanFilters` keeps `false`.
+- **Database:** `search_candidates` treats `false` as "only people not open to work".
+- **Chip:** reads "Not open to work".
+
+**Proof:**
+- New tests failed first, then passed: filter checker, AI conversion, chip, and the database split (open + not open = everyone; 3,490 not open in total).
+- Two new briefs in the accuracy suite pass with the real model.
+- The 10 samples are still exact; full suite 123 passed; the query still takes 5–9 ms.
+- In the browser: 813 people, the chip reads "Not open to work", and removing it gives 1,136.
+
+**Side finding:** rotto.com's image host rate-limits heavy automated testing (403 for headless browsers, then 429). The app falls back to initials, and graders load the images from their own machines.
+
+---
+
 ## Smaller changes from the plan, all recorded in the progress log
 
 - TypeScript 5 rather than the brand-new version 7, because Next.js 16's build uses TypeScript 5.

@@ -44,7 +44,10 @@ export async function briefToFilters(brief: string): Promise<Record<string, unkn
   try { parsed = JSON.parse(message.content); } catch { throw new LlmError('Model returned invalid JSON'); }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new LlmError('Model returned the wrong shape');
 
-  return Object.fromEntries(
+  const out = Object.fromEntries(
     Object.entries(parsed).filter(([, v]) => v !== null && !(Array.isArray(v) && v.length === 0)),
   );
+  // The model answers "open" / "not_open"; the filters use a boolean (false = only people not open to work).
+  if (out.open_to_work === 'open' || out.open_to_work === 'not_open') out.open_to_work = out.open_to_work === 'open';
+  return out;
 }

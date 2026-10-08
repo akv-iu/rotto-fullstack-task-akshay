@@ -13,6 +13,11 @@ describe('chip model', () => {
     ]);
   });
 
+  it('shows open_to_work false as "Not open to work"', () => {
+    expect(chipsOf({ open_to_work: false }).map((c) => c.text)).toEqual(['Not open to work']);
+    expect(chipsOf({ open_to_work: true }).map((c) => c.text)).toEqual(['Open to work']);
+  });
+
   it('removes exactly one value, and drops the key when it was the last', () => {
     const chips = chipsOf(f);
     expect(removeChip(f, chips.find((c) => c.kind === 'list' && c.value === 'AWS')!).skills).toEqual(['React']);

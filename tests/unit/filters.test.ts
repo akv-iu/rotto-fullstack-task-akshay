@@ -17,8 +17,13 @@ describe('cleanFilters', () => {
   });
 
   it('drops filters that do nothing, so they cannot mean "everyone"', () => {
-    expect(cleanFilters({ min_years: 0, max_years: 15, open_to_work: false, roles: [] })).toEqual({ filters: {}, runnable: false });
+    expect(cleanFilters({ min_years: 0, max_years: 15, roles: [] })).toEqual({ filters: {}, runnable: false });
     expect(cleanFilters({})).toEqual({ filters: {}, runnable: false });
+  });
+
+  it('keeps open_to_work false as a real filter ("not open to work")', () => {
+    expect(cleanFilters({ roles: ['Recruiter'], open_to_work: false })).toEqual({ filters: { roles: ['Recruiter'], open_to_work: false }, runnable: true });
+    expect(cleanFilters({ open_to_work: true })).toEqual({ filters: { open_to_work: true }, runnable: true });
   });
 
   it('keeps unclear words and makes the search non-runnable', () => {

@@ -29,7 +29,7 @@ export function chipsOf(f: Filters): Chip[] {
   }
   if (f.min_years != null) chips.push({ kind: 'scalar', key: 'min_years', label: CHIP_LABELS.min_years, text: `${f.min_years} yrs` });
   if (f.max_years != null) chips.push({ kind: 'scalar', key: 'max_years', label: CHIP_LABELS.max_years, text: `${f.max_years} yrs` });
-  if (f.open_to_work) chips.push({ kind: 'scalar', key: 'open_to_work', label: '', text: 'Open to work' });
+  if (f.open_to_work != null) chips.push({ kind: 'scalar', key: 'open_to_work', label: '', text: f.open_to_work ? 'Open to work' : 'Not open to work' });
   if (f.worked_at_company_type) chips.push({ kind: 'scalar', key: 'worked_at_company_type', label: CHIP_LABELS.worked_at_company_type, text: f.worked_at_company_type });
   if (f.current_company_type) chips.push({ kind: 'scalar', key: 'current_company_type', label: CHIP_LABELS.current_company_type, text: f.current_company_type });
   (f.unsupported ?? []).forEach((u, index) => chips.push({ kind: 'unsupported', index, text: u.text, reason: u.reason }));

@@ -17,7 +17,8 @@ const properties = {
   schools: enumList(VOCAB.schools),
   min_years: { type: ['integer', 'null'] },
   max_years: { type: ['integer', 'null'] },
-  open_to_work: { type: ['boolean', 'null'] },
+  // A choice, not a boolean: "not open" must be a deliberate answer, never a default false.
+  open_to_work: { type: ['string', 'null'], enum: ['open', 'not_open', null] },
   worked_at_company_type: companyType,
   current_company_type: companyType,
   unsupported: {
@@ -52,7 +53,7 @@ Rules:
 - Years: "5+ years" -> min_years 5; "under 3 years" -> max_years 2.
 - cities (all candidates are in the US): ${citiesWithStates}. A state maps to its listed cities ("Texas" -> ["Austin"], "California" -> ["Los Angeles","San Francisco"]).
 - "worked at / experience at a startup" -> worked_at_company_type "startup" (any past job). "currently at a startup" -> current_company_type "startup".
-- "open to work" / "looking for a job" -> open_to_work true.
+- "open to work" / "looking for a job" -> open_to_work "open". "not open to work" / "not looking" / "passive" -> "not_open". Otherwise null.
 - Education: "PhD"/"doctorate" -> degrees ["PhD"]; "master's" -> ["MS"]; "MBA" -> ["MBA"]; "studied at X" -> schools; "studied computer science" -> fields.
 - unsupported, reason "unsupported": every concrete requirement the fields cannot express: languages spoken, visa, salary, remote, gender, age, a city/company/school/skill not in the enums, a seniority like "principal" or "lead", and any request for "all"/"every" candidate.
 - unsupported, reason "unclear": words that could mean several different filters, e.g. "experienced", "seasoned", "good with data". Do not guess them.
@@ -61,7 +62,7 @@ Rules:
 
 Examples (field names omitted when null):
 "Pyhton devs in Chicgo with 5+ years" -> {"skills":["Python"],"cities":["Chicago"],"min_years":5}
-"React or Vue engineers in SF who are open to work" -> {"any_skills":["React","Vue"],"cities":["San Francisco"],"open_to_work":true}
+"React or Vue engineers in SF who are open to work" -> {"any_skills":["React","Vue"],"cities":["San Francisco"],"open_to_work":"open"}
 "ML folks who studied at MIT or Stanford" -> {"roles":["Machine Learning Engineer"],"schools":["MIT","Stanford University"]}
 "engineers in Texas" -> {"roles":${JSON.stringify(engineeringRoles)},"cities":["Austin"]}
 "experienced product designers" -> {"roles":["Product Designer"],"unsupported":[{"text":"experienced","reason":"unclear"}]}

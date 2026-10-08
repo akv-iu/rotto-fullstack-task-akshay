@@ -15,7 +15,7 @@ const search = async (args: Record<string, unknown>) => {
 
 describe('search_candidates', () => {
   it('returns nobody when there are no real conditions (never everyone)', async () => {
-    for (const f of [{}, { min_years: 0 }, { max_years: 15 }, { roles: [] }, { open_to_work: false }]) {
+    for (const f of [{}, { min_years: 0 }, { max_years: 15 }, { roles: [] }, { open_to_work: 'yes' }]) {
       expect((await search({ f, lim: 20, off: 0 })).total).toBe(0);
     }
   });
@@ -23,6 +23,17 @@ describe('search_candidates', () => {
   it('returns nobody when anything is unsupported', async () => {
     const r = await search({ f: { roles: ['Product Manager'], unsupported: [{ text: 'speaks Japanese', reason: 'unsupported' }] }, lim: 20, off: 0 });
     expect(r.total).toBe(0);
+  });
+
+  it('open_to_work true and false split a group exactly ("not open to work" is a real filter)', async () => {
+    const total = async (f: object) => (await search({ f, lim: 1, off: 0 })).total as number;
+    const [all, open, notOpen] = await Promise.all([
+      total({ seniorities: ['staff'] }), total({ seniorities: ['staff'], open_to_work: true }), total({ seniorities: ['staff'], open_to_work: false }),
+    ]);
+    expect(open).toBeGreaterThan(0);
+    expect(notOpen).toBeGreaterThan(0);
+    expect(open + notOpen).toBe(all);
+    expect(await total({ open_to_work: false })).toBe(3490); // 5,000 candidates, 1,510 open to work
   });
 
   it('matches exactly (data scientists with a PhD = 47)', async () => {

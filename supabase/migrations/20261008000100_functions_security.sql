@@ -30,7 +30,7 @@ as $$
     or public.f_arr(f, 'current_companies') is not null or public.f_arr(f, 'degrees') is not null
     or public.f_arr(f, 'fields') is not null or public.f_arr(f, 'schools') is not null
     or coalesce(public.f_num(f, 'min_years'), 0) > 0 or coalesce(public.f_num(f, 'max_years'), 15) < 15
-    or f -> 'open_to_work' = 'true'::jsonb
+    or jsonb_typeof(f -> 'open_to_work') = 'boolean'  -- true: open to work; false: not open
     or public.f_txt(f, 'worked_at_company_type') is not null or public.f_txt(f, 'current_company_type') is not null)
 $$;
 
@@ -45,7 +45,7 @@ as $$
            public.f_arr(f, 'current_companies') current_companies, public.f_arr(f, 'degrees') degrees,
            public.f_arr(f, 'fields') fields, public.f_arr(f, 'schools') schools,
            public.f_num(f, 'min_years') min_years, public.f_num(f, 'max_years') max_years,
-           f -> 'open_to_work' = 'true'::jsonb open_only,
+           case when jsonb_typeof(f -> 'open_to_work') = 'boolean' then (f ->> 'open_to_work')::boolean end want_open,
            public.f_txt(f, 'worked_at_company_type') worked_type, public.f_txt(f, 'current_company_type') current_type,
            public.filters_have_conditions(f) ok
   ),
@@ -66,7 +66,7 @@ as $$
       and (p.schools is null or c.schools && p.schools)
       and (p.min_years is null or c.years_experience >= p.min_years)
       and (p.max_years is null or c.years_experience <= p.max_years)
-      and (p.open_only is not true or c.open_to_work)
+      and (p.want_open is null or c.open_to_work = p.want_open)
       and (p.worked_type is null or c.company_types @> array[p.worked_type])
       and (p.current_type is null or c.current_company_type = p.current_type)
   )

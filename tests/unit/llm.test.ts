@@ -31,6 +31,16 @@ describe('briefToFilters', () => {
     expect(JSON.stringify(body)).not.toMatch(/cand_\d{4}/); // never candidate data
   });
 
+  it('maps the open_to_work choice to a boolean; only an explicit "not_open" means false', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key');
+    vi.stubGlobal('fetch', reply(JSON.stringify({ roles: ['Recruiter'], open_to_work: 'not_open' })));
+    expect(await briefToFilters('recruiters who are not open to work')).toEqual({ roles: ['Recruiter'], open_to_work: false });
+    vi.stubGlobal('fetch', reply(JSON.stringify({ roles: ['Recruiter'], open_to_work: 'open' })));
+    expect(await briefToFilters('recruiters open to work')).toEqual({ roles: ['Recruiter'], open_to_work: true });
+    vi.stubGlobal('fetch', reply(JSON.stringify({ roles: ['Recruiter'], open_to_work: null })));
+    expect(await briefToFilters('recruiters')).toEqual({ roles: ['Recruiter'] });
+  });
+
   it('turns a timeout, an HTTP error, a refusal or bad JSON into LlmError', async () => {
     vi.stubEnv('OPENAI_API_KEY', 'test-key');
     vi.stubGlobal('fetch', vi.fn(async () => { throw new DOMException('timed out', 'TimeoutError'); }));
