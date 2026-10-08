@@ -918,7 +918,8 @@ function SearchView() {
     api<PageResponse>(`/api/search/${id}?page=1`)
       .then((r) => {
         setResult({ search_id: id, filters: r.filters, total: r.total, results: r.results, searches_remaining: null });
-        setRows(r.results); setPage(1); setSearchedBrief(readBrief(id)); setStatus('done');
+        setRows(r.results); setPage(1); setStatus('done');
+        const saved = readBrief(id); setSearchedBrief(saved); setBrief(saved); // show what these results are for
       })
       .catch(() => { setStatus('idle'); router.replace('/'); });
   }, [params, router]);
