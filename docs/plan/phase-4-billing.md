@@ -277,7 +277,7 @@ Then add a second CI job to `.github/workflows/ci.yml`, so this runs on every pu
           (make dev > dev.log 2>&1 &)
           for i in $(seq 90); do curl -sf http://localhost:3000 > /dev/null && exit 0; sleep 2; done
           cat dev.log; exit 1
-      - run: node scripts/with-env.mjs vitest run tests/gate.test.ts tests/no-keys.test.ts
+      - run: node scripts/with-env.mjs npx vitest run tests/gate.test.ts tests/no-keys.test.ts
 ```
 Locally: start `npm run dev` in a terminal with both variables unset, then `npm test -- tests/no-keys.test.ts` → PASS (2 tests).
 
