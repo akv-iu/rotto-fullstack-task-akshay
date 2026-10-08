@@ -17,6 +17,9 @@ type Status = 'idle' | 'searching' | 'refining' | 'done' | 'error';
 // The brief that produced a search, kept per tab so a restored search can still be saved. Storage may be blocked: ignore.
 const rememberBrief = (id: string, brief: string) => { try { sessionStorage.setItem(`brief:${id}`, brief); } catch {} };
 const readBrief = (id: string) => { try { return sessionStorage.getItem(`brief:${id}`) ?? ''; } catch { return ''; } };
+// The last search in this tab, so the Search tab brings it back after a visit to Shortlists or Saved searches.
+const rememberLast = (id: string | null) => { try { if (id) sessionStorage.setItem('lastSearch', id); else sessionStorage.removeItem('lastSearch'); } catch {} };
+const readLast = () => { try { return sessionStorage.getItem('lastSearch'); } catch { return null; } };
 
 export default function SearchPage() {
   return <Suspense><SearchView /></Suspense>;
@@ -51,6 +54,7 @@ function SearchView() {
       // Keep the search in the URL: leaving the page or reloading brings it back, so a free user can still refine it.
       restored.current = r.search_id;
       rememberBrief(r.search_id, label);
+      rememberLast(r.search_id);
       router.replace(`/?search=${r.search_id}`, { scroll: false });
     } catch (e) {
       const err = e as ApiError;
@@ -62,8 +66,14 @@ function SearchView() {
   }, [openUpgrade, refreshPlan, result, router]);
 
   // Restore /?search=<id> (after navigating away, or a reload). Paging never uses a search.
+  // Plain / (the Search tab) brings back this tab's last search; typing a new brief still starts a new one.
   useEffect(() => {
     const id = params.get('search');
+    if (!id && !params.get('saved')) {
+      const last = readLast();
+      if (last && !restored.current) router.replace(`/?search=${last}`, { scroll: false });
+      return;
+    }
     if (!id || restored.current === id) return;
     restored.current = id;
     setStatus('refining');
@@ -73,7 +83,7 @@ function SearchView() {
         setRows(r.results); setPage(1); setStatus('done');
         const saved = readBrief(id); setSearchedBrief(saved); setBrief(saved); // show what these results are for
       })
-      .catch(() => { setStatus('idle'); router.replace('/'); });
+      .catch(() => { rememberLast(null); setStatus('idle'); router.replace('/'); }); // e.g. another company's search after a sign-in switch
   }, [params, router]);
 
   // Re-run a saved search: /?saved=<id>&brief=<text> (from the Saved searches page). Guarded for React StrictMode.
