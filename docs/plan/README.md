@@ -28,7 +28,7 @@
 - `make setup` / `make dev` / `make test` run with **no manual steps** and **no `.env` files**; the only inputs are `OPENAI_API_KEY` and `STRIPE_WEBHOOK_SECRET` from the shell.
 - Contract routes keep **exactly** the request and response shapes in TECH_REQUIREMENTS §3; extensions are additive (TECH §3a).
 - Model: **`gpt-4.1-mini-2025-04-14`**, `temperature: 0`, strict `json_schema`, **6 s timeout, no retry, one call per new search**. Never send candidate data.
-- Secrets: `OPENAI_API_KEY` is read only in `lib/server/llm.ts`; `STRIPE_WEBHOOK_SECRET` only in `lib/server/billing.ts`; `SUPABASE_SECRET_KEY` only in `adminClient()` in `lib/server/supabase.ts`, and `adminClient()` is called **only** from `lib/server/billing.ts`. Setup and test scripts also read them, but never ship to the browser. Every `lib/server` file starts with `import 'server-only'`.
+- Secrets: `OPENAI_API_KEY` is read only in `lib/server/llm.ts`; `STRIPE_WEBHOOK_SECRET` only in `lib/server/billing.ts`; `SUPABASE_SECRET_KEY` only in `adminClient()` in `lib/server/supabase.ts`, and `adminClient()` is called only from `lib/server/billing.ts` (webhook) and for **candidate reads** in `lib/server/search.ts` and `lib/server/lists.ts`, always after `requireRecruiter` (recruiters have no direct access to candidates, so the free plan can't be skipped). Setup and test scripts also read them, but never ship to the browser. Every `lib/server` file starts with `import 'server-only'`.
 - The company comes **only** from the token. "Not yours" and "doesn't exist" both → **404**.
 - Errors are `{ "error": "<plain sentence>" }`; never stack traces or SQL.
 - Success codes are **200** (including create).

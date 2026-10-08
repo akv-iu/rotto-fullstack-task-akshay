@@ -662,7 +662,7 @@ export function userClient(token: string): SupabaseClient {
   });
 }
 
-/** Bypasses RLS. Only lib/server/billing.ts may call this. */
+/** Bypasses RLS. Used only by the webhook (billing.ts) and for candidate reads after requireRecruiter (search.ts, lists.ts). */
 export function adminClient(): SupabaseClient {
   const key = process.env.SUPABASE_SECRET_KEY;
   if (!key) throw new Error('SUPABASE_SECRET_KEY is not set');
@@ -698,6 +698,7 @@ import { cleanFilters, type Filters } from '@/lib/shared/filters';
 import type { Ctx } from './auth';
 import { HttpError, must, requireUuid } from './http';
 import { briefToFilters, llmConfigured } from './llm';
+import { adminClient } from './supabase';
 
 export type CandidateCard = {
   id: string; full_name: string; avatar_url: string; headline: string; current_title: string; current_company: string;
@@ -717,9 +718,11 @@ export async function getPlan(ctx: Ctx): Promise<{ plan: 'free' | 'paid'; search
     : { plan: 'free', searches_remaining: Math.max(0, 1 - c.searches_used) };
 }
 
-async function runPage(ctx: Ctx, clean: Clean, page: number): Promise<{ total: number; results: CandidateCard[] }> {
+// Recruiters can't query candidates themselves (that would skip the free-plan limit), so the search runs with the
+// server's key. Every caller has already checked the recruiter and that the search belongs to their company.
+async function runPage(_ctx: Ctx, clean: Clean, page: number): Promise<{ total: number; results: CandidateCard[] }> {
   if (!clean.runnable) return { total: 0, results: [] };
-  return must(await ctx.db.rpc('search_candidates', { f: clean.filters, lim: PAGE_SIZE, off: (page - 1) * PAGE_SIZE }));
+  return must(await adminClient().rpc('search_candidates', { f: clean.filters, lim: PAGE_SIZE, off: (page - 1) * PAGE_SIZE }));
 }
 
 async function firstPage(ctx: Ctx, searchId: string, clean: Clean): Promise<SearchResponse> {

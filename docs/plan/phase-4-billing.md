@@ -15,7 +15,7 @@ Goal: `POST /api/billing/events` verifies Stripe signatures on the exact raw bod
 - Test: `tests/unit/signature.test.ts`, `tests/billing.test.ts`, `tests/no-keys.test.ts`
 
 **Interfaces:**
-- Consumes: `adminClient()` (Task 8; **only** this file may call it), `apply_billing_event` (Task 4), `route`/`json`/`must` (Task 8).
+- Consumes: `adminClient()` (Task 8), `apply_billing_event` (Task 4), `route`/`json`/`must` (Task 8).
 - Produces:
   - `verifyStripeSignature(raw: string | Buffer, header: string | null, secret: string): boolean`
   - `processStripeWebhook(raw: Buffer | string, signatureHeader: string | null): Promise<{ status: number; body: Record<string, unknown> }>`

@@ -17,7 +17,7 @@ Goal: the database itself keeps the companies apart and protects the plan, quota
 - Consumes: the tables from Task 2; helpers `admin()`, `signIn()`, `asUser()`, `resetCompany()`, `COMPANY`.
 - Produces (callable through `client.rpc(name, args)`):
   - `current_company_id() → uuid`
-  - `search_candidates(f jsonb, lim int, off int) → jsonb { total: number, results: CandidateCard[] }` where `CandidateCard = { id, full_name, avatar_url, headline, current_title, current_company, city, years_experience, open_to_work, skills }`
+  - `search_candidates(f jsonb, lim int, off int) → jsonb { total: number, results: CandidateCard[] }` (**service_role only**: the server calls it after its own checks; a recruiter calling it directly gets `42501`) where `CandidateCard = { id, full_name, avatar_url, headline, current_title, current_company, city, years_experience, open_to_work, skills }`
   - `reserve_search(p_brief text) → uuid | null` (null = no searches left)
   - `complete_search(p_search uuid, p_filters jsonb) → boolean`
   - `refund_search(p_search uuid) → boolean`
@@ -35,24 +35,27 @@ const rpc = async (token: string, fn: string, args: Record<string, unknown>) => 
   if (error) throw new Error(error.message);
   return data;
 };
+// The search runs with the server's key (recruiters can't call it), so these tests do too.
+const search = async (args: Record<string, unknown>) => {
+  const { data, error } = await admin().rpc('search_candidates', args);
+  if (error) throw new Error(error.message);
+  return data;
+};
 
 describe('search_candidates', () => {
   it('returns nobody when there are no real conditions (never everyone)', async () => {
-    const t = await signIn('acme');
     for (const f of [{}, { min_years: 0 }, { max_years: 15 }, { roles: [] }, { open_to_work: false }]) {
-      expect((await rpc(t, 'search_candidates', { f, lim: 20, off: 0 })).total).toBe(0);
+      expect((await search({ f, lim: 20, off: 0 })).total).toBe(0);
     }
   });
 
   it('returns nobody when anything is unsupported', async () => {
-    const t = await signIn('acme');
-    const r = await rpc(t, 'search_candidates', { f: { roles: ['Product Manager'], unsupported: [{ text: 'speaks Japanese', reason: 'unsupported' }] }, lim: 20, off: 0 });
+    const r = await search({ f: { roles: ['Product Manager'], unsupported: [{ text: 'speaks Japanese', reason: 'unsupported' }] }, lim: 20, off: 0 });
     expect(r.total).toBe(0);
   });
 
   it('matches exactly (data scientists with a PhD = 47)', async () => {
-    const t = await signIn('acme');
-    const r = await rpc(t, 'search_candidates', { f: { roles: ['Data Scientist'], degrees: ['PhD'] }, lim: 20, off: 0 });
+    const r = await search({ f: { roles: ['Data Scientist'], degrees: ['PhD'] }, lim: 20, off: 0 });
     expect(r.total).toBe(47);
     expect(r.results).toHaveLength(20);
     expect(Object.keys(r.results[0]).sort()).toEqual(
@@ -61,16 +64,15 @@ describe('search_candidates', () => {
   });
 
   it('pages through every result exactly once in a stable order', async () => {
-    const t = await signIn('acme');
     const f = { roles: ['Mobile Engineer'], skills: ['Swift'] };
     const seen: string[] = [];
     for (let off = 0; off < 220; off += 20) {
-      const r = await rpc(t, 'search_candidates', { f, lim: 20, off });
+      const r = await search({ f, lim: 20, off });
       seen.push(...r.results.map((c: { id: string }) => c.id));
     }
     expect(seen).toHaveLength(199);
     expect(new Set(seen).size).toBe(199);
-    const past = await rpc(t, 'search_candidates', { f, lim: 20, off: 400 });
+    const past = await search({ f, lim: 20, off: 400 });
     expect(past.total).toBe(199);
     expect(past.results).toEqual([]);
   });
@@ -193,7 +195,7 @@ as $$
     or public.f_txt(f, 'worked_at_company_type') is not null or public.f_txt(f, 'current_company_type') is not null)
 $$;
 
--- ---------- search (runs as the caller: RLS applies) ----------
+-- ---------- search (service_role only: the server calls it after checking the recruiter; see grants) ----------
 create function public.search_candidates(f jsonb, lim int, off int) returns jsonb
 language sql stable security invoker set search_path = ''
 as $$
@@ -334,7 +336,8 @@ alter table public.saved_briefs enable row level security;
 alter table public.subscriptions enable row level security;   -- no policies: invisible to recruiters
 alter table public.billing_events enable row level security;  -- no policies: invisible to recruiters
 
-create policy candidates_read on public.candidates for select to authenticated using (true);
+-- candidates: RLS on and no policy, and no grant below. Recruiters can't read or filter candidates directly,
+-- otherwise a free company could skip its one-search limit by querying Supabase itself (SCORING §6).
 create policy companies_own on public.companies for select to authenticated
   using (id = (select public.current_company_id()));
 create policy recruiters_own on public.recruiters for select to authenticated
@@ -360,18 +363,20 @@ alter default privileges in schema public revoke all on tables from anon, authen
 alter default privileges in schema public revoke all on sequences from anon, authenticated;
 alter default privileges in schema public revoke execute on functions from public, anon, authenticated;
 
-grant select on public.candidates, public.companies, public.recruiters, public.searches to authenticated;
+grant select on public.companies, public.recruiters, public.searches to authenticated;
 grant select, insert, delete on public.shortlists to authenticated;
 grant update (name) on public.shortlists to authenticated;
 grant select, insert, delete on public.shortlist_members, public.saved_briefs to authenticated;
 
 grant execute on function
   public.current_company_id(), public.f_arr(jsonb, text), public.f_num(jsonb, text), public.f_txt(jsonb, text),
-  public.filters_have_conditions(jsonb), public.search_candidates(jsonb, int, int),
+  public.filters_have_conditions(jsonb),
   public.reserve_search(text), public.complete_search(uuid, jsonb), public.refund_search(uuid),
   public.create_correction(uuid, jsonb)
 to authenticated;
-grant execute on function public.apply_billing_event(text, bigint, text, text, text, text) to service_role;
+grant execute on function public.apply_billing_event(text, bigint, text, text, text, text), public.search_candidates(jsonb, int, int),
+  public.f_arr(jsonb, text), public.f_num(jsonb, text), public.f_txt(jsonb, text), public.filters_have_conditions(jsonb)
+to service_role;
 ```
 
 - [ ] **Step 4: Apply and run the tests**
@@ -483,6 +488,11 @@ describe('acme cannot change anything it does not own, directly through Supabase
     expect(await snapshot()).toEqual(before);
   });
 
+  it('cannot search or read candidates directly (no way round the free plan)', async () => {
+    expect((await acme.rpc('search_candidates', { f: { roles: ['Recruiter'] }, lim: 20, off: 0 })).error?.code).toBe('42501');
+    expect((await acme.from('candidates').select('id').eq('role', 'Recruiter')).error?.code).toBe('42501');
+  });
+
   it('acme is still acme (cannot move its recruiter into globex)', async () => {
     expect((await acme.rpc('current_company_id')).data).toBe(COMPANY.acme);
   });
@@ -545,6 +555,7 @@ An independent reviewer checked this phase against TECH_REQUIREMENTS, SCORING, S
 
 | Requirement | Where in this phase | Proof |
 |---|---|---|
+| B1 / SCORING §6: the free plan can't be skipped by querying Supabase directly | no candidate grant or policy; `search_candidates` for service_role only | isolation "cannot search or read candidates directly" (`42501`) |
 | X1 / SEC-1: companies can't see or change each other's data, through Supabase directly | RLS policies, revoked grants, composite key on list members | `tests/isolation.test.ts`: every table × insert/update/delete, each refused with `42501`, full before/after snapshot |
 | SEC-2 / OQ-8: a recruiter can't change their own plan, quota or company | no write grants on `companies`, `recruiters`, `searches`; definer functions only | isolation "cheat" test; "acme is still acme" test |
 | F6 / FR-8.3: exactly one free search, even under a burst | one conditional `UPDATE` in `reserve_search` | `db.test.ts`: 20 concurrent → 1 |
@@ -556,6 +567,6 @@ An independent reviewer checked this phase against TECH_REQUIREMENTS, SCORING, S
 
 **Changed after review:** tests assert `42501` (permission denied), not just "an error" (a typo would also be an error); the attack covers every table and verb, moving acme's recruiter into globex, and branching a correction off a finished globex search; search reads each filter once instead of once per candidate; billing locks the company row so concurrent events can't set the wrong plan, and recomputes both companies; default privileges revoked for future migrations; `unsupported` of any non-empty shape blocks the search; result cards include `headline` (NOTES search-flow row).
 
-**Open question for you:** a free recruiter who has used their one search can still call the search function, or read the candidates table, directly through Supabase with their own token, and get unlimited results. They can't change their quota, but they can skip it. Closing this means the server reads candidates with its own key and recruiters get no direct read access to candidates. It's a small change to Tasks 4, 8 and 11–12, and to ARCHITECTURE. See the summary in chat.
+**Decided (user, 2026-10-07, Option A):** recruiters get no direct access to candidates. A free recruiter could otherwise call `search_candidates` or filter the `candidates` table through Supabase with their own token and get unlimited searches. Only the server reads candidates, using its own key and only after checking the recruiter (Tasks 8, 11, 12).
 
-**Verdict:** ready to implement once the open question is answered.
+**Verdict:** ready to implement.

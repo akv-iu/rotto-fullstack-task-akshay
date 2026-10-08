@@ -117,7 +117,7 @@ Every phase was reviewed against TECH_REQUIREMENTS, SCORING, SPEC, ARCHITECTURE 
 | Secret scan only checked the production build, but graders run `make dev` | Accepted. It also scans the running dev server |
 | README numbers came from the throwaway prompt | Accepted. Measured again in Task 19 |
 | Non-default Supabase ports; a `service_role` text pattern; 400 on saving a search that can't return anyone; more "+ Filter" types | Rejected (reasons in the phase files) |
-| A free recruiter can skip the quota by calling `search_candidates` or reading `candidates` directly through Supabase | **Open: user decision** |
+| A free recruiter can skip the quota by calling `search_candidates` or reading `candidates` directly through Supabase | **Closed (user chose Option A).** No recruiter access to `candidates`; the server reads them with its own key after checking the recruiter. The brief is silent on this (B1 only says the limit is "enforced on the server"); we close it because SCORING §6 says nothing may open a path round the limit |
 
 ## 5. Where the data lives: Supabase facts from the brief
 

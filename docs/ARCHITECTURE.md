@@ -28,7 +28,7 @@ Postgres (local Supabase in Docker)
 **Rules that hold everywhere**
 1. **The browser never talks to the database for data.** It only uses Supabase to sign in, and calls `/api` for everything else. Nothing on the server calls our own API.
 2. **API files are thin.** All logic is in `lib/server`, so it lives in one readable place.
-3. **Three secrets, two files:** `OPENAI_API_KEY` → `llm`; `SUPABASE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` → `billing`. Both modules import `server-only`, so the build fails if anything tries to ship them to the browser.
+3. **Three secrets, two files:** `OPENAI_API_KEY` → `llm`; `STRIPE_WEBHOOK_SECRET` → `billing`; `SUPABASE_SECRET_KEY` → `supabase` (`adminClient()`, used by `billing` and for candidate reads in `search` / `lists`). Both modules import `server-only`, so the build fails if anything tries to ship them to the browser.
 4. **The company always comes from the token**, never from the request.
 5. **The database enforces company separation itself** (RLS plus constraints). The API checks are a second layer, not the only one.
 
@@ -74,7 +74,7 @@ There are **no `.env` files**: the graders' machine won't have one. A **missing 
 
 | Table | Key columns | Recruiter access (via RLS / grants) |
 |---|---|---|
-| `candidates` | `id` (`cand_0001`), `full_name`, `avatar_url`, `headline`, `current_title`, `current_company`, `current_company_logo_url`, `role`, `seniority`, `years_experience`, `city`, `state`, `open_to_work`, **arrays** `skills`, `companies`, `company_types`, `degrees`, `fields`, `schools`, plus `current_company_type`, and `profile jsonb` (the original record, for the profile page) | **read** (any signed-in user); no writes |
+| `candidates` | `id` (`cand_0001`), `full_name`, `avatar_url`, `headline`, `current_title`, `current_company`, `current_company_logo_url`, `role`, `seniority`, `years_experience`, `city`, `state`, `open_to_work`, **arrays** `skills`, `companies`, `company_types`, `degrees`, `fields`, `schools`, plus `current_company_type`, and `profile jsonb` (the original record, for the profile page) | **none** for recruiters: the server reads them with its own key after checking the recruiter, so the free plan can't be skipped by querying Supabase directly (decided 2026-10-07); no writes |
 | `companies` | `id`, `slug` (`acme`/`globex`), `plan` (`free`/`paid`), `searches_used` | **read own row**; no writes |
 | `recruiters` | `user_id` (auth user), `company_id` | **read own row**; no writes |
 | `searches` | `id`, `company_id`, `brief`, `filters jsonb`, `status` (`pending`/`ready`/`refunded`), `root_id` (null for an original search), `corrections_used`, `created_at` | **read own company's**; **no direct writes** (only through the functions in §4.3) |
@@ -97,7 +97,7 @@ Indexes: GIN on `skills`, `companies`, `company_types`, `degrees`, `fields`, `sc
 | Function | Security | Callable by | Does |
 |---|---|---|---|
 | `current_company_id()` | definer | authenticated | The caller's company |
-| `search_candidates(filters jsonb, lim int, off int)` | **invoker** (runs as the recruiter, so RLS applies) | authenticated | The one fixed, parameterized query: exact match, AND across fields; order `open_to_work desc, years_experience desc, id asc`; returns rows + `total`. **Returns nothing if no real condition is present** (a second "never everyone" guard, after the one in `lib/server/filters`) |
+| `search_candidates(filters jsonb, lim int, off int)` | **invoker** | **service_role only** (the server calls it after checking the recruiter and the search) | The one fixed, parameterized query: exact match, AND across fields; order `open_to_work desc, years_experience desc, id asc`; returns rows + `total`. **Returns nothing if no real condition is present** (a second "never everyone" guard, after the one in `lib/server/filters`) |
 | `reserve_search(brief text)` | definer | authenticated | **In one statement:** take the free search (`… where plan = 'paid' or searches_used < 1`). If granted, insert a `searches` row with `status = 'pending'` and return its id. If not → return null (→ 402) |
 | `complete_search(search_id, filters jsonb)` | definer | authenticated | `pending` → `ready`, storing the cleaned filters. Own company only |
 | `refund_search(search_id)` | definer | authenticated | **Only a `pending` search** of the caller's company: give the free search back, mark it `refunded` |
