@@ -1,4 +1,5 @@
 import 'server-only';
+import { cleanFilters } from '@/lib/shared/filters';
 import type { Ctx } from './auth';
 import { HttpError, must, requireUuid } from './http';
 import type { CandidateCard } from './search';
@@ -95,4 +96,31 @@ export async function removeMember(ctx: Ctx, listId: string, personId: string) {
   await requireOwnList(ctx, listId);
   must(await ctx.db.from('shortlist_members').delete().eq('shortlist_id', listId).eq('candidate_id', personId));
   return { ok: true as const };
+}
+
+export async function listSaved(ctx: Ctx) {
+  return must(await ctx.db.from('saved_briefs').select('id, brief, filters, created_at').order('created_at', { ascending: false }));
+}
+
+export async function createSaved(ctx: Ctx, body: Record<string, unknown>) {
+  const brief = typeof body.brief === 'string' ? body.brief.trim() : '';
+  if (brief.length < 1 || brief.length > 500) throw new HttpError(400, 'A saved search needs a brief of 1 to 500 characters.');
+  const clean = cleanFilters(body.filters);
+  if (!clean) throw new HttpError(400, 'The filters must be a JSON object.'); // contract: filters is any object
+  const row = must(await ctx.db.from('saved_briefs').insert({ company_id: ctx.companyId, brief, filters: clean.filters }).select('id').single())!; // .single() errors (→ 500) if nothing came back
+  return { id: row.id as string };
+}
+
+export async function deleteSaved(ctx: Ctx, id: string) {
+  requireUuid(id, 'saved search');
+  const rows = must(await ctx.db.from('saved_briefs').delete().eq('id', id).select('id')) ?? [];
+  if (!rows.length) throw new HttpError(404, 'That saved search was not found.');
+  return { ok: true as const };
+}
+
+export async function getPerson(_ctx: Ctx, id: string) {
+  requireCandidateId(id);
+  const row = must(await candidates().select('profile').eq('id', id).maybeSingle());
+  if (!row) throw new HttpError(404, 'That candidate was not found.');
+  return row.profile;
 }
