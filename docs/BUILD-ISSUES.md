@@ -226,6 +226,23 @@ Filters nested 5,000 levels deep overflowed the call stack, which was also a 500
 
 ---
 
+## 19. The model swapped a missing company for a look-alike ("Salesforce" -> "Saltbox")
+
+**Found in the brief-by-brief audit.** The brief asks "how you stop the LLM inventing filters the data can't support". "account executives who have worked at Salesforce" (Salesforce isn't in the data) produced a **Saltbox** chip, every time. The result happened to be 0 people because Salesforce was also flagged, but removing that flag would have returned Saltbox people.
+
+**First attempt, reverted:** a prompt rule saying "never substitute a look-alike name (e.g. "Microsoft" is not "Mintleaf")". It made things worse. The model then answered **Mintleaf**, the name used in the example, *without* flagging anything, which would have returned 18 wrong people. "big tech" also stopped mapping to enterprise. The full suite caught both. Lesson: never put a real data value in a prompt example.
+
+**Fix (in code, behaves the same every time):** `dropUnnamedCompanies()` in `lib/server/llm.ts`. A company filter is kept only if the brief mentions that company's name, allowing typos (edit distance ≤ 2) and spacing ("Pebble Pay"). Otherwise it is dropped, and the search returns nobody ("a company not in our data") instead of the wrong company.
+
+**Proof:**
+- A unit test failed first, then passed: the Saltbox swap is dropped; "Fernwy", "Pebble Pay" and "Titan" are kept.
+- New accuracy briefs pass 3 of 3 with the real model: Salesforce, Harvard, Princeton must set no company or school, and the "Standford" typo must still map to Stanford University.
+- The 10 samples are still exact.
+
+**Known soft spot:** the word "passive" alone is flaky. In 1 of 3 runs the model also flagged it as not in our data, so the result was empty. "Not looking for a job" is reliable, and that wording is what the test uses.
+
+---
+
 ## Smaller changes from the plan, all recorded in the progress log
 
 - TypeScript 5 rather than the brand-new version 7, because Next.js 16's build uses TypeScript 5.

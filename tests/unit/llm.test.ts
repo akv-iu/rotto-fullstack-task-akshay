@@ -41,6 +41,18 @@ describe('briefToFilters', () => {
     expect(await briefToFilters('recruiters')).toEqual({ roles: ['Recruiter'] });
   });
 
+  it('drops a company the brief never names (no look-alike swaps), but keeps typos and spacing variants', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key');
+    vi.stubGlobal('fetch', reply(JSON.stringify({ roles: ['Account Executive'], companies: ['Saltbox'] })));
+    expect(await briefToFilters('AEs who have worked at Salesforce')).toEqual({
+      roles: ['Account Executive'], unsupported: [{ text: 'a company not in our data', reason: 'unsupported' }],
+    });
+    vi.stubGlobal('fetch', reply(JSON.stringify({ companies: ['Saltbox'], unsupported: [{ text: 'Salesforce', reason: 'unsupported' }] })));
+    expect(await briefToFilters('worked at Salesforce')).toEqual({ unsupported: [{ text: 'Salesforce', reason: 'unsupported' }] });
+    vi.stubGlobal('fetch', reply(JSON.stringify({ companies: ['Fernway', 'Pebblepay'], current_companies: ['Titan Software'] })));
+    expect(await briefToFilters('ex-Fernwy or Pebble Pay people now at Titan')).toEqual({ companies: ['Fernway', 'Pebblepay'], current_companies: ['Titan Software'] });
+  });
+
   it('turns a timeout, an HTTP error, a refusal or bad JSON into LlmError', async () => {
     vi.stubEnv('OPENAI_API_KEY', 'test-key');
     vi.stubGlobal('fetch', vi.fn(async () => { throw new DOMException('timed out', 'TimeoutError'); }));

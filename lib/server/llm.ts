@@ -49,5 +49,38 @@ export async function briefToFilters(brief: string): Promise<Record<string, unkn
   );
   // The model answers "open" / "not_open"; the filters use a boolean (false = only people not open to work).
   if (out.open_to_work === 'open' || out.open_to_work === 'not_open') out.open_to_work = out.open_to_work === 'open';
+  dropUnnamedCompanies(out, brief);
   return out;
+}
+
+/**
+ * The schema only allows real company names, so for a company we don't have the model sometimes picks a look-alike
+ * ("Salesforce" -> "Saltbox"). Company names are distinctive, so keep one only if the brief mentions it (allowing
+ * typos and spacing); otherwise drop it and make sure the search returns nobody rather than the wrong company.
+ */
+function dropUnnamedCompanies(out: Record<string, unknown>, brief: string) {
+  const text = brief.toLowerCase();
+  const words = text.split(/[^a-z0-9]+/);
+  const named = (company: string) => {
+    const first = company.split(' ')[0].toLowerCase();
+    return text.replace(/[^a-z0-9]/g, '').includes(first) || words.some((w) => w.length >= 4 && editDistance(w, first) <= 2);
+  };
+  for (const key of ['companies', 'current_companies']) {
+    const values = out[key];
+    if (!Array.isArray(values)) continue;
+    const kept = values.filter((v) => typeof v === 'string' && named(v));
+    if (kept.length === values.length) continue;
+    if (kept.length) out[key] = kept; else delete out[key];
+    if (!Array.isArray(out.unsupported) || !out.unsupported.length) out.unsupported = [{ text: 'a company not in our data', reason: 'unsupported' }];
+  }
+}
+
+function editDistance(a: string, b: string): number {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[b.length];
 }
