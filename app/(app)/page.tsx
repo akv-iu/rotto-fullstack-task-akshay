@@ -174,7 +174,7 @@ function SearchView() {
       <section className={cx('min-w-0 flex-1 px-4 py-5 md:px-6', hero && 'relative isolate overflow-x-clip pb-16')}>
         {hero && (
           <div aria-hidden className="hero-backdrop">
-            <div className="hero-dots" /><div className="hero-ring" /><div className="hero-ring is-second" /><div className="hero-halo" />
+            <div className="hero-dots" />{[0, 1, 2, 3, 4].map((i) => <div key={i} className="hero-ring" />)}<div className="hero-halo" />
           </div>
         )}
         <PlanBanner />

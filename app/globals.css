@@ -67,18 +67,22 @@
     background-size: 22px 22px;
     mask-image: radial-gradient(ellipse 80% 70% at 50% 45%, #000 15%, transparent 75%);
   }
-  /* Thin hoops seen from a low angle (tilted back in 3D), each spinning around its own centre. A bright arc travels
-   * round each hoop, so the turning reads as rotation, like the rim of a turning grill seen from the side. */
+  /* A flowing vortex: thin nested hoops seen from a low angle, all turning the same way at slightly different speeds.
+   * Each carries a bright head with a fading tail, so the eye reads streams of light swirling round the search box. */
   .hero-ring {
-    position: absolute; left: 50%; top: 46%; width: min(1400px, 170vw); aspect-ratio: 1; border-radius: 50%;
-    background: conic-gradient(transparent 0deg, color-mix(in oklab, var(--ink) 55%, transparent) 70deg, transparent 170deg,
-      color-mix(in oklab, var(--ink) 25%, transparent) 260deg, transparent 330deg);
-    mask-image: radial-gradient(closest-side, transparent calc(100% - 5px), #000 calc(100% - 3px), transparent 100%);
-    filter: blur(.6px);
-    animation: hero-ring 18s linear infinite;
-    --tilt: rotateX(77deg) rotateY(-4deg);
+    position: absolute; left: 50%; top: 46%; width: var(--w); aspect-ratio: 1; border-radius: 50%;
+    background: conic-gradient(from var(--from), transparent 0deg, color-mix(in oklab, var(--ink) 6%, transparent) 150deg,
+      color-mix(in oklab, var(--ink) 60%, transparent) 290deg, transparent 296deg);
+    mask-image: radial-gradient(closest-side, transparent calc(100% - 4px), #000 calc(100% - 2.5px), transparent 100%);
+    filter: blur(.5px);
+    animation: hero-ring var(--t) linear infinite;
+    --tilt: rotateX(76deg);
   }
-  .hero-ring.is-second { width: min(1100px, 140vw); --tilt: rotateX(72deg) rotateY(5deg); animation-duration: 26s; animation-direction: reverse; opacity: .7; }
+  .hero-ring:nth-of-type(2) { --w: min(1500px, 180vw); --t: 20s; --from: 0deg;   --tilt: rotateX(78deg) rotateY(-3deg); }
+  .hero-ring:nth-of-type(3) { --w: min(1260px, 155vw); --t: 16s; --from: 120deg; --tilt: rotateX(76deg) rotateY(2deg); }
+  .hero-ring:nth-of-type(4) { --w: min(1040px, 130vw); --t: 13s; --from: 230deg; --tilt: rotateX(74deg) rotateY(-2deg); }
+  .hero-ring:nth-of-type(5) { --w: min(840px, 108vw);  --t: 11s; --from: 60deg;  --tilt: rotateX(72deg) rotateY(3deg); }
+  .hero-ring:nth-of-type(6) { --w: min(660px, 88vw);   --t: 9s;  --from: 300deg; --tilt: rotateX(70deg) rotateY(-1deg); opacity: .7; }
   .hero-halo {
     position: absolute; left: 50%; top: 42%; width: min(1100px, 150vw); aspect-ratio: 1.3; border-radius: 50%;
     translate: -50% -50%;
