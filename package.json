@@ -10,7 +10,8 @@
     "dev": "node scripts/dev.mjs",
     "build": "node scripts/with-env.mjs next build",
     "test": "node scripts/with-env.mjs vitest run",
-    "test:unit": "vitest run tests/unit"
+    "test:unit": "vitest run tests/unit",
+    "plan": "node scripts/plan.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
