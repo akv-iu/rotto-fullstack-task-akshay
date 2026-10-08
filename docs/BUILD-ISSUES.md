@@ -130,6 +130,22 @@ The Supabase library labels query results as "might be missing", even when the q
 
 ---
 
+## 14. Typing in the search box stuttered once results were loaded
+
+**What you saw:** the search box lagged while typing after a search, worst after "Show more" had loaded many people.
+
+**Cause:** the result rows were drawn inside the same component that holds the typed text. Every keystroke re-drew all of them, each with its Shortlist button.
+
+**How it was checked (measured, not guessed):**
+- First the landing animations were ruled out. Frame timing on the real graphics chip held about 90 fps, with or without each effect.
+- Then the time from each keystroke to the screen updating:
+  - landing page: about 24 to 32 ms;
+  - **with 300 rows: about 150 ms, worst 360 ms.**
+
+**Fix:** the list of rows is remembered (`useMemo` in `app/(app)/page.tsx`) and only re-drawn when the rows, the filters or the open profile change. With 300 rows typing is now about 40 ms (worst 72 ms), close to the empty page's 32 ms. Re-checked: refine, Show more, Save search, opening and switching profiles, shortlisting from a row, the phone layout. No errors.
+
+---
+
 ## Smaller changes from the plan, all recorded in the progress log
 
 - TypeScript 5 rather than the brand-new version 7, because Next.js 16's build uses TypeScript 5.

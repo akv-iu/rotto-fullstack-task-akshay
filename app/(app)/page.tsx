@@ -1,6 +1,6 @@
 'use client';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PlanBanner, useAppState } from '@/components/app-shell';
 import { ChipBar } from '@/components/search/ChipBar';
 import { ProfilePanel } from '@/components/ProfilePanel';
@@ -81,6 +81,13 @@ function SearchView() {
   const hero = !result && status !== 'searching' && status !== 'refining';
   const typed = useTypewriter(EXAMPLES, hero && !brief && !outOfSearches);
   const savable = Boolean(searchedBrief && result && Object.keys(result.filters).length && !result.filters.unsupported);
+  // Typing in the search box re-renders this page; without this, every keystroke also re-rendered every result row
+  // (150 ms per key with 300 rows loaded). The list only changes when the rows, the filters or the open profile change.
+  const filters = result?.filters;
+  const resultRows = useMemo(() => filters && rows.map((c) => (
+    <ResultRow key={c.id} candidate={c} filters={filters} selected={openId === c.id} onOpen={() => setOpenId(c.id)}
+      action={<ShortlistButton candidateId={c.id} name={c.full_name} compact />} />
+  )), [rows, filters, openId]);
 
   const run = useCallback(async (body: object, kind: 'searching' | 'refining', label: string) => {
     lastRequest.current = { body, kind };
@@ -222,10 +229,7 @@ function SearchView() {
             {status === 'refining' ? <RowSkeletons /> : rows.length > 0 ? (
               <>
                 <ul className="-mx-4 overflow-hidden border-b border-line md:mx-0 md:rounded-xl md:border">
-                  {rows.map((c) => (
-                    <ResultRow key={c.id} candidate={c} filters={result.filters} selected={openId === c.id} onOpen={() => setOpenId(c.id)}
-                      action={<ShortlistButton candidateId={c.id} name={c.full_name} compact />} />
-                  ))}
+                  {resultRows}
                 </ul>
                 {moreState === 'loading' && <RowSkeletons rows={3} />}
                 {rows.length < result.total && (
