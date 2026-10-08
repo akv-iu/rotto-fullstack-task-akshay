@@ -67,15 +67,18 @@
     background-size: 22px 22px;
     mask-image: radial-gradient(ellipse 80% 70% at 50% 45%, #000 15%, transparent 75%);
   }
-  /* Two wide, flattened soft rings around the search box that swell and tilt out of step: a ring turning, seen edge-on. */
+  /* Thin hoops seen from a low angle (tilted back in 3D), each spinning around its own centre. A bright arc travels
+   * round each hoop, so the turning reads as rotation, like the rim of a turning grill seen from the side. */
   .hero-ring {
-    position: absolute; left: 50%; top: 46%; width: max(1500px, 190vw); height: 820px; border-radius: 50%;
-    translate: -50% -50%;
-    background: radial-gradient(closest-side, transparent 54%, color-mix(in oklab, var(--ink) 19%, transparent) 70%, transparent 86%);
-    filter: blur(24px);
-    animation: hero-ring 8s ease-in-out infinite alternate;
+    position: absolute; left: 50%; top: 46%; width: min(1400px, 170vw); aspect-ratio: 1; border-radius: 50%;
+    background: conic-gradient(transparent 0deg, color-mix(in oklab, var(--ink) 55%, transparent) 70deg, transparent 170deg,
+      color-mix(in oklab, var(--ink) 25%, transparent) 260deg, transparent 330deg);
+    mask-image: radial-gradient(closest-side, transparent calc(100% - 5px), #000 calc(100% - 3px), transparent 100%);
+    filter: blur(.6px);
+    animation: hero-ring 18s linear infinite;
+    --tilt: rotateX(77deg) rotateY(-4deg);
   }
-  .hero-ring.is-second { animation-duration: 11s; animation-direction: alternate-reverse; opacity: .65; }
+  .hero-ring.is-second { width: min(1100px, 140vw); --tilt: rotateX(72deg) rotateY(5deg); animation-duration: 26s; animation-direction: reverse; opacity: .7; }
   .hero-halo {
     position: absolute; left: 50%; top: 42%; width: min(1100px, 150vw); aspect-ratio: 1.3; border-radius: 50%;
     translate: -50% -50%;
@@ -83,7 +86,7 @@
       color-mix(in oklab, var(--bg) 50%, transparent) 45%, transparent 100%);
     animation: hero-halo 11.3s cubic-bezier(.45, 0, .55, 1) infinite;
   }
-  @keyframes hero-ring { from { transform: translateY(-3%) scale(1, .42) rotate(-6deg); } to { transform: translateY(3%) scale(1.12, .8) rotate(6deg); } }
+  @keyframes hero-ring { from { transform: translate(-50%, -50%) perspective(1600px) var(--tilt) rotateZ(0deg); } to { transform: translate(-50%, -50%) perspective(1600px) var(--tilt) rotateZ(360deg); } }
   @keyframes hero-halo { 0%, 100% { scale: .78; opacity: .45; } 50% { scale: 1.18; opacity: 1; } }
   @keyframes glow-drift {
     from { transform: translateX(-5%) scale(1); }
