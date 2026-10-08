@@ -3,6 +3,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { AppStateProvider, BottomNav, TopBar } from '@/components/app-shell';
 import { Skeleton } from '@/components/ui';
+import { searchCache } from '@/lib/client/search-cache';
 import { supabase } from '@/lib/client/supabase';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -11,7 +12,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => (data.session ? setSignedIn(true) : router.replace('/sign-in')));
-    const { data } = supabase.auth.onAuthStateChange((_event, session) => { if (!session) router.replace('/sign-in'); });
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) { searchCache.clear(); router.replace('/sign-in'); } // never show the last company's search to the next one
+    });
     return () => data.subscription.unsubscribe();
   }, [router]);
 

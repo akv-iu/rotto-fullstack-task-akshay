@@ -9,6 +9,7 @@ import { ShortlistButton } from '@/components/ShortlistButton';
 import { ErrorBar, FirstVisit, NoResults, RowSkeletons, SearchingSkeleton } from '@/components/search/states';
 import { Button } from '@/components/ui';
 import { ApiError, api } from '@/lib/client/api';
+import { searchCache } from '@/lib/client/search-cache';
 import type { CandidateCard, PageResponse, SearchResponse } from '@/lib/server/search';
 import type { Filters } from '@/lib/shared/filters';
 
@@ -29,19 +30,25 @@ function SearchView() {
   const { plan, refreshPlan, openUpgrade } = useAppState();
   const params = useSearchParams();
   const router = useRouter();
-  const [brief, setBrief] = useState('');
-  const [searchedBrief, setSearchedBrief] = useState('');
-  const [result, setResult] = useState<SearchResponse | null>(null);
-  const [rows, setRows] = useState<CandidateCard[]>([]);
-  const [page, setPage] = useState(1);
-  const [status, setStatus] = useState<Status>('idle');
+  // Coming back from Shortlists or Saved searches: start from the remembered screen, not empty (no flash, no request).
+  const [cached] = useState(() => {
+    const c = searchCache.get();
+    const wanted = params.get('search') ?? (params.get('saved') ? null : readLast());
+    return c && c.result.search_id === wanted ? c : null;
+  });
+  const [brief, setBrief] = useState(cached?.brief ?? '');
+  const [searchedBrief, setSearchedBrief] = useState(cached?.searchedBrief ?? '');
+  const [result, setResult] = useState<SearchResponse | null>(cached?.result ?? null);
+  const [rows, setRows] = useState<CandidateCard[]>(cached?.rows ?? []);
+  const [page, setPage] = useState(cached?.page ?? 1);
+  const [status, setStatus] = useState<Status>(cached ? 'done' : 'idle');
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [moreState, setMoreState] = useState<'idle' | 'loading' | 'error'>('idle');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const lastRequest = useRef<{ body: object; kind: 'searching' | 'refining' } | null>(null);
   const startedFromSaved = useRef(false);
-  const restored = useRef<string | null>(null);
+  const restored = useRef<string | null>(cached?.result.search_id ?? null);
   const outOfSearches = plan?.plan === 'free' && plan.searches_remaining === 0;
   const savable = Boolean(searchedBrief && result && Object.keys(result.filters).length && !result.filters.unsupported);
 
@@ -71,7 +78,7 @@ function SearchView() {
     const id = params.get('search');
     if (!id && !params.get('saved')) {
       const last = readLast();
-      if (last && !restored.current) router.replace(`/?search=${last}`, { scroll: false });
+      if (last) router.replace(`/?search=${last}`, { scroll: false }); // already showing it (from memory)? the effect below skips the fetch
       return;
     }
     if (!id || restored.current === id) return;
@@ -96,6 +103,22 @@ function SearchView() {
     router.replace('/');
     run({ saved_brief_id: savedId }, 'searching', savedBrief);
   }, [params, router, run]);
+
+  // Remember the screen as it changes, and the scroll position when leaving; put the scroll back on return.
+  const scrollY = useRef(0);
+  useEffect(() => {
+    if (result) searchCache.set({ result, rows, page, brief, searchedBrief, scrollY: scrollY.current });
+  }, [result, rows, page, brief, searchedBrief]);
+  useEffect(() => {
+    if (cached) requestAnimationFrame(() => window.scrollTo(0, cached.scrollY));
+    const onScroll = () => { scrollY.current = window.scrollY; };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      const s = searchCache.get();
+      if (s) searchCache.set({ ...s, scrollY: scrollY.current });
+    };
+  }, [cached]);
 
   const search = () => { const text = brief.trim(); if (text) run({ brief: text }, 'searching', text); };
   const refine = (filters: Filters) => result && run({ parent_search_id: result.search_id, filters }, 'refining', searchedBrief);
