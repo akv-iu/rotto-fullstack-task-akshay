@@ -143,6 +143,7 @@ const VARIANTS = {
   primary: 'bg-accent text-accent-fg hover:opacity-90',
   secondary: 'border border-border bg-surface text-ink hover:bg-bg',
   quiet: 'text-muted hover:text-ink',
+  accent: 'border border-accent bg-surface text-accent hover:bg-accent-soft', // Upgrade: one variant, not overrides (they lost to secondary's colours)
 } as const;
 
 // 44 px tall on phones (SCORING: tap targets >= 44 px), 36 px from md up.
@@ -242,7 +243,7 @@ function PlanStatus() {
   return (
     <div className="flex items-center gap-2 text-sm">
       <span className="text-muted"><span className="hidden sm:inline">Free plan · </span>{n} {n === 1 ? 'search' : 'searches'} left</span>
-      <Button variant="secondary" onClick={openUpgrade} className="border-accent text-accent">Upgrade</Button>
+      <Button variant="accent" onClick={openUpgrade}>Upgrade</Button>
     </div>
   );
 }
