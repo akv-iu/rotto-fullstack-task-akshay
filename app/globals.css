@@ -7,14 +7,22 @@
   --danger: #b42318; --danger-soft: #fef3f2; --skeleton: #ececea;
   color-scheme: light;
 }
+/* Dark: the device setting, unless the theme toggle chose light; or the toggle chose dark. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #111110; --surface: #191918; --ink: #f2f2f0; --muted: #a3a39d; --line: #252524; --border: #363634;
     --accent: #a99ffd; --accent-fg: #111110; --accent-soft: #221d3d; --accent-line: #40387a;
     --warn: #f5c48a; --warn-soft: #2a2010; --warn-line: #5a4520;
     --danger: #ff8a80; --danger-soft: #2c1514; --skeleton: #252524;
     color-scheme: dark;
   }
+}
+:root[data-theme="dark"] {
+  --bg: #111110; --surface: #191918; --ink: #f2f2f0; --muted: #a3a39d; --line: #252524; --border: #363634;
+  --accent: #a99ffd; --accent-fg: #111110; --accent-soft: #221d3d; --accent-line: #40387a;
+  --warn: #f5c48a; --warn-soft: #2a2010; --warn-line: #5a4520;
+  --danger: #ff8a80; --danger-soft: #2c1514; --skeleton: #252524;
+  color-scheme: dark;
 }
 
 @theme inline {

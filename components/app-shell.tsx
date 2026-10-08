@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { api } from '@/lib/client/api';
 import { supabase } from '@/lib/client/supabase';
+import { ThemeToggle } from './ThemeToggle';
 import { Button, Skeleton, cx } from './ui';
 
 export type Plan = { plan: 'free' | 'paid'; searches_remaining: number | null };
@@ -60,6 +61,7 @@ export function TopBar() {
         </nav>
         <div className="ml-auto flex items-center gap-3">
           <PlanStatus />
+          <ThemeToggle />
           <Button variant="quiet" aria-label="Sign out" onClick={() => supabase.auth.signOut()} className="min-w-11 px-1"><SignOut size={18} /></Button>
         </div>
       </div>

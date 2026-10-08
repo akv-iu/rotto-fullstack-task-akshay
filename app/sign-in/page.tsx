@@ -2,6 +2,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/client/supabase';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { Button } from '@/components/ui';
 
 export default function SignIn() {
@@ -26,7 +27,8 @@ export default function SignIn() {
   }
 
   return (
-    <main className="grid min-h-dvh place-items-center px-4">
+    <main className="relative grid min-h-dvh place-items-center px-4">
+      <div className="absolute right-4 top-3"><ThemeToggle /></div>
       <form onSubmit={submit} className="w-full max-w-sm rounded-xl border border-line bg-surface p-6">
         <h1 className="text-xl font-semibold tracking-tight">Sign in to Rotto</h1>
         <label className="mt-6 block text-sm font-medium" htmlFor="email">Email</label>
