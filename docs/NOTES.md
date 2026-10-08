@@ -152,6 +152,8 @@ We build our own Supabase **on the local machine**. Nothing exists anywhere unti
 | Paging | p95 69 ms (grader allows 300 ms) | `tests/speed.test.ts` |
 | Tokens per search | ~2,200 input (2,048 cached), ~90 output | `LOG_LLM_USAGE=1`, five searches |
 | Cost per search | **≈ $0.0004** (≈ $0.001 when the cache is cold) | $0.40 / $0.10 cached / $1.60 output per 1M tokens, checked on OpenAI's model page 2026-10-08 |
+| Fresh clone (Windows, 2026-10-08) | Clone of `5636551` → `npm ci && npm run db:setup` (= `make setup`) in 71 s → `npm run dev` (= `make dev`): sign-in OK, "data scientists with a PhD" = 47 with the right filters, paging OK, plan 1 → 0, **no `.env` created**. `make` itself isn't installed on this Windows machine; the Makefile only runs these npm scripts | local stack stopped with `--no-backup` first, so the clone started empty |
+| Search speed on the day | 2.2–2.6 s per search in the clone, with almost all of it in the OpenAI call (Next.js 3–87 ms). OpenAI varies; still under the 3 s limit | dev log timings |
 | Secrets in the browser | 0 leaks in 56 build files and 86 files served by the dev server | `scripts/check-secrets.mjs` (also in CI) |
 
 ## 8. Test audit (2026-10-08): could any test pass without protecting us?
