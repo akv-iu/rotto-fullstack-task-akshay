@@ -39,7 +39,7 @@ create function public.search_candidates(f jsonb, lim int, off int) returns json
 language sql stable security invoker set search_path = ''
 as $$
   -- Read each filter once (one row), not once per candidate: keeps the query fast and lets the GIN indexes work.
-  with p as (
+  with p as materialized (  -- MATERIALIZED: else Postgres inlines it and re-reads the filters for every candidate (240 ms → 7 ms)
     select public.f_arr(f, 'roles') roles, public.f_arr(f, 'seniorities') seniorities, public.f_arr(f, 'cities') cities,
            public.f_arr(f, 'skills') skills, public.f_arr(f, 'any_skills') any_skills, public.f_arr(f, 'companies') companies,
            public.f_arr(f, 'current_companies') current_companies, public.f_arr(f, 'degrees') degrees,
