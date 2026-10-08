@@ -556,7 +556,7 @@ export function ChipBar({ filters, onChange, disabled }: Props) {
       <AddFilter filters={filters} onChange={onChange} disabled={disabled} />
       {chips.length > 0 && (
         <button type="button" disabled={disabled} onClick={() => onChange({})}
-          className="shrink-0 text-sm text-muted underline underline-offset-2 hover:text-ink">Clear filters</button>
+          className="min-h-11 shrink-0 text-sm text-muted underline underline-offset-2 hover:text-ink md:min-h-0">Clear filters</button>
       )}
     </div>
   );
@@ -1079,8 +1079,8 @@ export function ShortlistButton({ candidateId, name, compact, block }: { candida
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger asChild>
-        <Button variant={block ? 'primary' : 'secondary'} aria-label={`${on ? 'Shortlisted' : 'Shortlist'} ${name}`}
-          className={cx(block && 'w-full', !block && on && 'border-accent-line bg-accent-soft text-accent', compact && 'size-11 px-0 sm:size-auto sm:px-3')}>
+        <Button variant={block ? 'primary' : on ? 'accent' : 'secondary'} aria-label={`${on ? 'Shortlisted' : 'Shortlist'} ${name}`}
+          className={cx(block && 'w-full', compact && 'size-11 px-0 sm:size-auto sm:px-3')}>
           {on ? <Check size={14} weight="bold" /> : <Plus size={14} weight="bold" />}
           <span className={cx(compact && 'sr-only sm:not-sr-only')}>{on ? 'Shortlisted' : 'Shortlist'}</span>
         </Button>

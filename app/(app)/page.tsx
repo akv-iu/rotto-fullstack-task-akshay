@@ -3,7 +3,9 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { PlanBanner, useAppState } from '@/components/app-shell';
 import { ChipBar } from '@/components/search/ChipBar';
+import { ProfilePanel } from '@/components/ProfilePanel';
 import { ResultRow } from '@/components/search/ResultRow';
+import { ShortlistButton } from '@/components/ShortlistButton';
 import { ErrorBar, FirstVisit, NoResults, RowSkeletons, SearchingSkeleton } from '@/components/search/states';
 import { Button } from '@/components/ui';
 import { ApiError, api } from '@/lib/client/api';
@@ -142,7 +144,8 @@ function SearchView() {
               <>
                 <ul className="-mx-4 overflow-hidden border-b border-line md:mx-0 md:rounded-xl md:border">
                   {rows.map((c) => (
-                    <ResultRow key={c.id} candidate={c} filters={result.filters} selected={openId === c.id} onOpen={() => setOpenId(c.id)} />
+                    <ResultRow key={c.id} candidate={c} filters={result.filters} selected={openId === c.id} onOpen={() => setOpenId(c.id)}
+                      action={<ShortlistButton candidateId={c.id} name={c.full_name} compact />} />
                   ))}
                 </ul>
                 {moreState === 'loading' && <RowSkeletons rows={3} />}
@@ -156,7 +159,10 @@ function SearchView() {
           </div>
         )}
       </section>
-      {/* Task 16 renders the profile panel here when openId is set. */}
+      {openId && result && (
+        <ProfilePanel id={openId} onClose={() => setOpenId(null)}
+          highlight={new Set([...(result.filters.skills ?? []), ...(result.filters.any_skills ?? [])])} />
+      )}
     </div>
   );
 }

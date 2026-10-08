@@ -23,7 +23,7 @@ export function ChipBar({ filters, onChange, disabled }: Props) {
       <AddFilter filters={filters} onChange={onChange} disabled={disabled} />
       {chips.length > 0 && (
         <button type="button" disabled={disabled} onClick={() => onChange({})}
-          className="shrink-0 text-sm text-muted underline underline-offset-2 hover:text-ink">Clear filters</button>
+          className="min-h-11 shrink-0 text-sm text-muted underline underline-offset-2 hover:text-ink md:min-h-0">Clear filters</button>
       )}
     </div>
   );
