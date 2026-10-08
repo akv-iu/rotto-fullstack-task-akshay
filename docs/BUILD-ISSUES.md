@@ -169,6 +169,21 @@ Light and dark screenshots look the same as before. MacBooks (2× screens, up to
 
 ---
 
+## 16. The first search and first page were too slow on a freshly started server
+
+**Found in the brief-by-brief audit.** The brief measures speed "on our machine": a new search under 3 s, a page under 300 ms.
+
+**Cause:** `next dev` builds each route the first time it is requested, which takes 1–3 s. Our speed tests never saw this, because they always ran against a server that had already been used.
+
+**Measured on a fresh `make dev` with an empty build cache (before → after):**
+- first search: 4,354 → **1,694 ms**;
+- first page: 1,174 → **94 ms**;
+- first profile: 1,270 → **50 ms**.
+
+**Fix:** `scripts/dev.mjs` requests every page and API route once as soon as the server is up. The requests carry no token, so they get 401 (or 400 for the webhook) and read or change nothing, but every route is built before anyone uses it. It finishes about 20 s after start and prints "✓ All routes built".
+
+---
+
 ## Smaller changes from the plan, all recorded in the progress log
 
 - TypeScript 5 rather than the brand-new version 7, because Next.js 16's build uses TypeScript 5.
