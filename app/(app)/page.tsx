@@ -6,7 +6,7 @@ import { ChipBar } from '@/components/search/ChipBar';
 import { ProfilePanel } from '@/components/ProfilePanel';
 import { ResultRow } from '@/components/search/ResultRow';
 import { ShortlistButton } from '@/components/ShortlistButton';
-import { ErrorBar, FirstVisit, NoResults, RowSkeletons, SearchingSkeleton } from '@/components/search/states';
+import { EXAMPLES, ErrorBar, FirstVisit, NoResults, RowSkeletons, SearchingSkeleton } from '@/components/search/states';
 import { Button, cx } from '@/components/ui';
 import { ApiError, api } from '@/lib/client/api';
 import { searchCache } from '@/lib/client/search-cache';
@@ -21,6 +21,32 @@ const readBrief = (id: string) => { try { return sessionStorage.getItem(`brief:$
 // The last search in this tab, so the Search tab brings it back after a visit to Shortlists or Saved searches.
 const rememberLast = (id: string | null) => { try { if (id) sessionStorage.setItem('lastSearch', id); else sessionStorage.removeItem('lastSearch'); } catch {} };
 const readLast = () => { try { return sessionStorage.getItem('lastSearch'); } catch { return null; } };
+
+/**
+ * Types the example briefs into the empty search box one after another (as rotto.com does), so people see what to
+ * write. Off when the box has text, when out of searches, and for reduced-motion users. Returns '' when off.
+ */
+function useTypewriter(phrases: readonly string[], on: boolean) {
+  const [text, setText] = useState('');
+  useEffect(() => {
+    setText('');
+    if (!on || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    let i = 0, n = 0, deleting = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      const phrase = phrases[i % phrases.length];
+      n = deleting ? n - 2 : n + 1;
+      setText(phrase.slice(0, Math.max(n, 0)));
+      let wait = deleting ? 18 : 45;
+      if (!deleting && n >= phrase.length) { deleting = true; wait = 1800; }
+      else if (deleting && n <= 0) { deleting = false; n = 0; i++; wait = 400; }
+      timer = setTimeout(tick, wait);
+    };
+    timer = setTimeout(tick, 700);
+    return () => clearTimeout(timer);
+  }, [on, phrases]);
+  return text;
+}
 
 export default function SearchPage() {
   return <Suspense><SearchView /></Suspense>;
@@ -53,6 +79,7 @@ function SearchView() {
   // Before the first search the page is a landing page (centred headline + big search box, like rotto.com);
   // once there is a search it becomes the working layout (search bar on top, chips, results).
   const hero = !result && status !== 'searching' && status !== 'refining';
+  const typed = useTypewriter(EXAMPLES, hero && !brief && !outOfSearches);
   const savable = Boolean(searchedBrief && result && Object.keys(result.filters).length && !result.filters.unsupported);
 
   const run = useCallback(async (body: object, kind: 'searching' | 'refining', label: string) => {
@@ -144,7 +171,12 @@ function SearchView() {
 
   return (
     <div className="flex items-start">
-      <section className={cx('min-w-0 flex-1 px-4 py-5 md:px-6', hero && 'overflow-x-clip pb-16')}>
+      <section className={cx('min-w-0 flex-1 px-4 py-5 md:px-6', hero && 'relative isolate overflow-x-clip pb-16')}>
+        {hero && (
+          <div aria-hidden className="hero-backdrop">
+            <div className="hero-dots" /><div className="hero-ring" /><div className="hero-ring is-second" /><div className="hero-halo" />
+          </div>
+        )}
         <PlanBanner />
         {hero && (
           <div className="mx-auto max-w-3xl pt-8 text-center md:pt-20">
@@ -159,7 +191,7 @@ function SearchView() {
             hero && 'rounded-2xl p-2 pl-4 md:text-lg')}>
           <label htmlFor="brief" className="sr-only">Describe who you&apos;re looking for</label>
           <input id="brief" value={brief} maxLength={500} onChange={(e) => setBrief(e.target.value)} disabled={outOfSearches}
-            aria-describedby={outOfSearches ? 'brief-help' : undefined} placeholder="Describe who you're looking for…"
+            aria-describedby={outOfSearches ? 'brief-help' : undefined} placeholder={typed ? `${typed}|` : "Describe who you're looking for…"}
             className={cx('min-w-0 flex-1 bg-transparent py-1.5 outline-none placeholder:text-muted', hero && 'py-3')} />
           <Button type="submit" variant="primary" disabled={outOfSearches || status === 'searching' || !brief.trim()}>
             {status === 'searching' ? 'Searching…' : 'Search'}

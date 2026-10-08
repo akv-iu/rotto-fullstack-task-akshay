@@ -10,7 +10,14 @@ const isDark = () =>
 /** Light/dark switch. Until pressed, the app follows the device setting; the choice is remembered in this browser. */
 export function ThemeToggle() {
   const [dark, setDark] = useState<boolean | null>(null); // unknown until mounted (the server can't know)
-  useEffect(() => setDark(isDark()), []);
+  useEffect(() => {
+    setDark(isDark());
+    // Follow the device if its setting changes while the page is open (matters until the toggle is used).
+    const m = matchMedia('(prefers-color-scheme: dark)');
+    const onChange = () => setDark(isDark());
+    m.addEventListener('change', onChange);
+    return () => m.removeEventListener('change', onChange);
+  }, []);
   function toggle() {
     const next = isDark() ? 'light' : 'dark';
     document.documentElement.dataset.theme = next;

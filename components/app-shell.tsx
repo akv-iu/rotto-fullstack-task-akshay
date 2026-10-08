@@ -59,7 +59,7 @@ export function TopBar() {
               className={isActive(pathname, href) ? 'font-medium text-ink' : 'text-muted hover:text-ink'}>{label}</Link>
           ))}
         </nav>
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-1 sm:gap-3">
           <PlanStatus />
           <ThemeToggle />
           <Button variant="quiet" aria-label="Sign out" onClick={() => supabase.auth.signOut()} className="min-w-11 px-1"><SignOut size={18} /></Button>
@@ -76,7 +76,7 @@ function PlanStatus() {
   const n = plan.searches_remaining ?? 0;
   return (
     <div className="flex items-center gap-2 text-sm">
-      <span className="text-muted"><span className="hidden sm:inline">Free plan · </span>{n} {n === 1 ? 'search' : 'searches'} left</span>
+      <span className="whitespace-nowrap text-muted"><span className="hidden sm:inline">Free plan · </span>{n} {n === 1 ? 'search' : 'searches'} left</span>
       <Button variant="accent" onClick={openUpgrade}>Upgrade</Button>
     </div>
   );

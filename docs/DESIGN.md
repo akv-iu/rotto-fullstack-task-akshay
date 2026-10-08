@@ -83,6 +83,8 @@ Warm graphite neutrals, **one purple accent** used **only** for actions and high
 > **Also 2026-10-08 (user): the search page is a landing page before the first search,** like rotto.com: a large centred headline ("Find the right people, in plain English."), one line of explanation, a large centred search box with the glow, and the examples centred below. After a search it becomes the working layout (search bar on top, chips, results); state 1 (first visit) keeps its rule that examples fill the box but never run it.
 >
 > **Also 2026-10-08 (user): a light/dark toggle** (sun/moon) in the top bar and on the sign-in page. Until pressed, the app follows the device setting; the choice is remembered in this browser and applied before the first paint (no flash).
+>
+> **Also 2026-10-08 (user): the landing backdrop is modelled on rotto.com's hero** (inspected in the browser): a faint dot grid, two soft grey rings that swell and tilt like their WebGL bands (ours is CSS only), a breathing halo in the centre (their own CSS technique), and the search box typing out our example briefs. Landing view only; everything is still for reduced-motion users.
 
 ![Look options considered (C, Graphite & Signal, chosen)](design/03-look-options.png)
 

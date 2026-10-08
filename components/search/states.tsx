@@ -4,7 +4,7 @@ import type { Filters } from '@/lib/shared/filters';
 import { Button, Skeleton } from '@/components/ui';
 import { chipsOf } from './chip-model';
 
-const EXAMPLES = [
+export const EXAMPLES = [
   'senior React engineers in New York who have worked at a startup',
   'data scientists with a PhD',
   'product designers in San Francisco open to work',
