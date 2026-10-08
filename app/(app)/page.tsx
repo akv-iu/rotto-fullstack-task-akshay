@@ -7,7 +7,7 @@ import { ProfilePanel } from '@/components/ProfilePanel';
 import { ResultRow } from '@/components/search/ResultRow';
 import { ShortlistButton } from '@/components/ShortlistButton';
 import { ErrorBar, FirstVisit, NoResults, RowSkeletons, SearchingSkeleton } from '@/components/search/states';
-import { Button } from '@/components/ui';
+import { Button, cx } from '@/components/ui';
 import { ApiError, api } from '@/lib/client/api';
 import { searchCache } from '@/lib/client/search-cache';
 import type { CandidateCard, PageResponse, SearchResponse } from '@/lib/server/search';
@@ -50,6 +50,9 @@ function SearchView() {
   const startedFromSaved = useRef(false);
   const restored = useRef<string | null>(cached?.result.search_id ?? null);
   const outOfSearches = plan?.plan === 'free' && plan.searches_remaining === 0;
+  // Before the first search the page is a landing page (centred headline + big search box, like rotto.com);
+  // once there is a search it becomes the working layout (search bar on top, chips, results).
+  const hero = !result && status !== 'searching' && status !== 'refining';
   const savable = Boolean(searchedBrief && result && Object.keys(result.filters).length && !result.filters.unsupported);
 
   const run = useCallback(async (body: object, kind: 'searching' | 'refining', label: string) => {
@@ -141,22 +144,29 @@ function SearchView() {
 
   return (
     <div className="flex items-start">
-      <section className="min-w-0 flex-1 px-4 py-5 md:px-6">
+      <section className={cx('min-w-0 flex-1 px-4 py-5 md:px-6', hero && 'overflow-x-clip pb-16')}>
         <PlanBanner />
-        <div className="relative isolate">
-        <div aria-hidden className="search-glow" />
+        {hero && (
+          <div className="mx-auto max-w-3xl pt-8 text-center md:pt-20">
+            <h1 className="text-4xl font-semibold leading-[1.1] tracking-tight md:text-6xl">Find the right people,<br className="hidden sm:block" /> in plain English.</h1>
+            <p className="mx-auto mt-4 max-w-xl text-muted md:text-lg">Describe who you want. We turn it into filters you can see and change, then search 5,000 candidates.</p>
+          </div>
+        )}
+        <div className={cx('relative isolate', hero && 'mx-auto mt-8 max-w-2xl md:mt-10')}>
+        <div aria-hidden className={cx('search-glow', hero && 'is-hero')} />
         <form onSubmit={(e) => { e.preventDefault(); search(); }}
-          className="flex items-center gap-2 rounded-xl border border-border bg-surface p-1.5 pl-3 shadow-[0_10px_30px_-12px_color-mix(in_oklab,var(--accent)_35%,transparent)] focus-within:border-accent">
+          className={cx('flex items-center gap-2 rounded-xl border border-border bg-surface p-1.5 pl-3 shadow-[0_10px_30px_-12px_color-mix(in_oklab,var(--accent)_35%,transparent)] focus-within:border-accent',
+            hero && 'rounded-2xl p-2 pl-4 md:text-lg')}>
           <label htmlFor="brief" className="sr-only">Describe who you&apos;re looking for</label>
           <input id="brief" value={brief} maxLength={500} onChange={(e) => setBrief(e.target.value)} disabled={outOfSearches}
             aria-describedby={outOfSearches ? 'brief-help' : undefined} placeholder="Describe who you're looking for…"
-            className="min-w-0 flex-1 bg-transparent py-1.5 outline-none placeholder:text-muted" />
+            className={cx('min-w-0 flex-1 bg-transparent py-1.5 outline-none placeholder:text-muted', hero && 'py-3')} />
           <Button type="submit" variant="primary" disabled={outOfSearches || status === 'searching' || !brief.trim()}>
             {status === 'searching' ? 'Searching…' : 'Search'}
           </Button>
         </form>
         </div>
-        {outOfSearches && <p id="brief-help" className="mt-1.5 text-sm text-muted">New searches need the paid plan. You can still change the filters of your last search.</p>}
+        {outOfSearches && <p id="brief-help" className={cx("mt-1.5 text-sm text-muted", hero && "text-center")}>New searches need the paid plan. You can still change the filters of your last search.</p>}
 
         {status === 'idle' && !result && <FirstVisit onPick={setBrief} freeLeft={plan?.plan === 'free' ? plan.searches_remaining : null} />}
         {status === 'searching' && <SearchingSkeleton />}

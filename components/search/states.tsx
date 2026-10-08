@@ -13,10 +13,9 @@ const EXAMPLES = [
 export function FirstVisit({ onPick, freeLeft }: { onPick: (brief: string) => void; freeLeft: number | null }) {
   if (freeLeft === 0) return null; // the plan banner explains; examples would fill a disabled box
   return (
-    <div className="mt-8 max-w-2xl">
-      <h2 className="text-lg font-semibold">Describe the people you want, in plain English.</h2>
-      <p className="mt-1 text-muted">Role, skills, city, seniority, experience, education. For example:</p>
-      <div className="mt-3 flex flex-wrap gap-2">
+    <div className="mx-auto mt-6 max-w-2xl text-center">
+      <p className="text-sm text-muted">Try one of these:</p>
+      <div className="mt-3 flex flex-wrap justify-center gap-2">
         {/* Fills the box; never runs it, so a free user can't spend their search by accident. */}
         {EXAMPLES.map((e) => (
           <button key={e} type="button" onClick={() => onPick(e)}

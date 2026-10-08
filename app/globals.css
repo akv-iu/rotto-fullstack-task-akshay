@@ -41,6 +41,7 @@
       radial-gradient(40% 65% at 72% 55%, color-mix(in oklab, var(--accent) 18%, transparent), transparent 70%);
     animation: glow-drift 12s ease-in-out infinite alternate;
   }
+  .search-glow.is-hero { inset: -56px -12%; filter: blur(56px); opacity: .9; } /* bigger on the landing view; the section clips it */
   @keyframes glow-drift {
     from { transform: translateX(-5%) scale(1); }
     to { transform: translateX(5%) scale(1.08); }
