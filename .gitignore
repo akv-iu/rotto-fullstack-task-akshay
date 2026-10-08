@@ -3,3 +3,11 @@ node_modules/
 .next/
 .env*
 !.env.example
+
+# OS, editor and tool output
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
+coverage/
