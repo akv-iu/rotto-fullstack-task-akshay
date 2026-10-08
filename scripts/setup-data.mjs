@@ -11,6 +11,14 @@ const must = async (query) => {
   return data;
 };
 
+// 0. `supabase db reset` restarts the containers; wait until the API answers again (up to 60 s) before loading.
+for (let i = 0; ; i++) {
+  const { error } = await admin.from('companies').select('id').limit(1);
+  if (!error) break;
+  if (i === 60) throw new Error(`Supabase did not come back after the reset: ${error.message}`);
+  await new Promise((r) => setTimeout(r, 1000));
+}
+
 // 1. Recruiters (db reset wipes auth.users, so createUser normally succeeds; tolerate re-runs anyway).
 const RECRUITERS = [
   { email: 'recruiter@acme.test', slug: 'acme' },
