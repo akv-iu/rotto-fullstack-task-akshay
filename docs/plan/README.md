@@ -36,7 +36,7 @@
 - Success codes are **200** (including create).
 - UI copy: plain sentences, **no em-dashes**, one name per action ("Shortlist", "Save search", "Upgrade").
 - Candidate photos and logos load with a **plain `<img>`**, never `next/image` optimisation.
-- One accent colour (`#c2410c` light / `#ff8a4c` dark), Instrument Sans, tokens from DESIGN §5.
+- One accent colour (`#5b4bdb` light / `#a99ffd` dark, Rotto purple; was orange until 2026-10-08), Montserrat, tokens from DESIGN §5.
 
 ## Review Focus
 

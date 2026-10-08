@@ -143,8 +143,10 @@ function SearchView() {
     <div className="flex items-start">
       <section className="min-w-0 flex-1 px-4 py-5 md:px-6">
         <PlanBanner />
+        <div className="relative isolate">
+        <div aria-hidden className="search-glow" />
         <form onSubmit={(e) => { e.preventDefault(); search(); }}
-          className="flex items-center gap-2 rounded-xl border border-border bg-surface p-1.5 pl-3 focus-within:border-accent">
+          className="flex items-center gap-2 rounded-xl border border-border bg-surface p-1.5 pl-3 shadow-[0_10px_30px_-12px_color-mix(in_oklab,var(--accent)_35%,transparent)] focus-within:border-accent">
           <label htmlFor="brief" className="sr-only">Describe who you&apos;re looking for</label>
           <input id="brief" value={brief} maxLength={500} onChange={(e) => setBrief(e.target.value)} disabled={outOfSearches}
             aria-describedby={outOfSearches ? 'brief-help' : undefined} placeholder="Describe who you're looking for…"
@@ -153,6 +155,7 @@ function SearchView() {
             {status === 'searching' ? 'Searching…' : 'Search'}
           </Button>
         </form>
+        </div>
         {outOfSearches && <p id="brief-help" className="mt-1.5 text-sm text-muted">New searches need the paid plan. You can still change the filters of your last search.</p>}
 
         {status === 'idle' && !result && <FirstVisit onPick={setBrief} freeLeft={plan?.plan === 'free' ? plan.searches_remaining : null} />}

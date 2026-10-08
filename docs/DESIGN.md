@@ -76,7 +76,9 @@ Sources: [Juicebox search docs](https://docs.juicebox.ai/search) · [Juicebox Pe
 
 ## 5. Look: "Graphite & Signal"
 
-Warm graphite neutrals, **one burnt-orange accent** used **only** for actions and highlights, and the typeface **Instrument Sans**. **Light and dark**, following the device setting.
+Warm graphite neutrals, **one purple accent** used **only** for actions and highlights, and the typeface **Montserrat**. **Light and dark**, following the device setting.
+
+> **Changed 2026-10-08 (user):** the accent and font now match rotto.com: purple instead of burnt orange, Montserrat instead of Instrument Sans, plus a soft glow drifting behind the search box (still for reduced-motion users). The purple is a little deeper than rotto.com's `#6c5ce7`, which measures 4.49:1 as small text, just under the 4.5:1 minimum; `#5b4bdb` measures 5.2–6.0:1 in light mode and 6.9–8.2:1 in dark. The original orange screenshots in `docs/design/` show the earlier accent; layout and states are unchanged.
 
 ![Look options considered (C, Graphite & Signal, chosen)](design/03-look-options.png)
 
@@ -88,7 +90,7 @@ Warm graphite neutrals, **one burnt-orange accent** used **only** for actions an
 | Muted text | `#6f6f6a` | `#a3a39d` | Secondary text, labels |
 | Line | `#efefed` | `#252524` | Row dividers |
 | Border | `#d6d6d2` | `#363634` | Inputs, chips, buttons |
-| **Accent** | `#c2410c` | `#ff8a4c` | Primary buttons, highlights, selected states |
+| **Accent** | `#5b4bdb` (was `#c2410c`) | `#a99ffd` (was `#ff8a4c`) | Primary buttons, highlights, selected states |
 | Accent background | `#fdf0e9` | `#2c1c13` | Matched skills, "Shortlisted" |
 | Warning (unsupported chip) | `#92400e` on `#fef6e7` | dark variant | "Not in our data" chips |
 | Error | `#b42318` on `#fef3f2` | dark variant | Failed search |

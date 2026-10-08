@@ -195,7 +195,7 @@ Searches always count toward `searches_used`, including on the paid plan ("1 sea
 ## 8. Frontend
 
 - **Next.js 16 App Router.** Pages are client components that fetch `/api` with the token; there is **one sign-in guard** in `app/(app)/layout.tsx` that shows a skeleton until the session is known, then renders the page or redirects to `/sign-in`.
-- **Styling:** Tailwind v4 with CSS-variable tokens for light and dark (the colour table in DESIGN §5); Instrument Sans via `next/font`; Phosphor icons.
+- **Styling:** Tailwind v4 with CSS-variable tokens for light and dark (the colour table in DESIGN §5); Montserrat via `next/font`; Phosphor icons.
 - **Accessible primitives** (menus, dialogs, sheets) from Radix, styled to our tokens. No other component kit.
 - **Images:** candidate photos and company logos load with a **plain `<img>`**, never `next/image` optimisation (the image host blocks server-side fetches).
 - Screens, behaviours and states are as specified in [DESIGN.md](DESIGN.md).
