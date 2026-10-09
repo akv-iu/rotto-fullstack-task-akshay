@@ -261,3 +261,19 @@ Both findings were clean-up rules overriding correct model output ("engineers la
 - **Known limit, kept on purpose:** the linked-"or" check matches value names. If both sides name the same city but different spellings of a shared skill ("Go and Kubernetes in Boston or golang and k8s in Boston"), it can flag a single search. Rare; documented rather than another parser rewrite before the deadline.
 - Proof (no API calls): unit 47/47, database + isolation + hostile 44 passed, TypeScript clean.
 - **Follow-up (same day):** the phrase check missed "aren't backend engineers" and comma lists, so an excluded role became the required one (188 → 0, 105 → 0). Safeguard with no phrase recognition: an excluded role is never kept, narrowed to or put back. Only when the model required nothing but roles it also excluded (a pure contradiction) does the wording decide, and an unrecognised wording then gives an empty result, never a wrong one. Proof: unit 48/48 (incl. "aren't", comma lists, "but no"), no API calls.
+
+## 16. Sixth review (2026-10-09): state transitions and recovery
+
+All fixed with tests that failed first; no paid API calls (fake model replies, faked API answers in Chrome, database tests).
+
+| # | Finding | Fix | Proof |
+|---|---|---|---|
+| 1 | Clean-up deleted explicit non-engineering roles ("data scientists who are also Python developers" 185 → 1,051) and narrowed "any engineers, including backend" (186 → 37) | The technology rule only removes engineering roles; no narrowing when the brief says any / all / including / such as | Unit tests (5 briefs) |
+| 2 | Retry after a failed search saved under the previous brief | "Try again" repeats the request with its own brief | Chrome, faked API: saved brief is the retried one |
+| 3 | Save during a refine marked the new search "Saved" | Save is disabled until results are shown | Chrome: button disabled while refining |
+| 4 | A temporary restore failure dropped a free user's only search | Only 404/400 forget it; anything else keeps it and offers Try again | Chrome: error + retry, search kept, retry restores it |
+| 5 | A failed refine used up one of the 10 edits | Results are loaded before the edit is recorded | Unit tests with a working plan read: a failed page query records nothing (fails on the old code), a successful one records the edit |
+| 6 | "Not counted" was promised even when the refund failed | Said only when the refund applied | Unit tests (refund ok / failed) |
+| 7 | A recruiter could refund their own in-flight search and reserve another | `refund_search(search, company)` is server-only | `db.test.ts`: recruiter call refused, other company's search not refunded |
+
+Known limit kept (documented in §15): the linked-"or" check matches value names, so differently spelled shared skills can be flagged.

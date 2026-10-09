@@ -14,6 +14,7 @@ export type PageResponse = { search_id: string; page: number; filters: Filters; 
 
 const PAGE_SIZE = 20;
 const NOT_COUNTED = "The search didn't go through. It wasn't counted against your plan. Please try again.";
+const NOT_SURE = "The search didn't go through. Please try again in a moment.";
 type Clean = { filters: Filters; runnable: boolean };
 
 export async function getPlan(ctx: Ctx): Promise<{ plan: 'free' | 'paid'; searches_remaining: number | null }> {
@@ -56,10 +57,14 @@ async function finish(ctx: Ctx, id: string, clean: Clean): Promise<SearchRespons
   }
 }
 
+/** Server-only refund (recruiters can't call it). Promises "not counted" only when the refund really applied. */
 async function refund(ctx: Ctx, id: string, cause: unknown): Promise<never> {
   console.error('search failed, refunding', id, cause);
-  const r = await ctx.db.rpc('refund_search', { p_search: id });
-  if (r.error || r.data !== true) console.error('refund did not apply', id, r.error?.message);
+  const r = await adminClient().rpc('refund_search', { p_search: id, p_company: ctx.companyId }).then((x) => x, (e) => ({ data: null, error: e }));
+  if (r.error || r.data !== true) {
+    console.error('refund did not apply', id, r.error?.message);
+    throw new HttpError(502, NOT_SURE);
+  }
   throw new HttpError(502, NOT_COUNTED);
 }
 
@@ -84,10 +89,12 @@ export async function correctSearch(ctx: Ctx, parentId: string, rawFilters: unkn
   requireUuid(parentId, 'search');
   const clean = cleanFilters(rawFilters);
   if (!clean) throw new HttpError(400, 'The filters must be a JSON object.');
+  // Results first, then record the edit: a failed page query uses none of the 10 edits.
+  const [page, plan] = await Promise.all([runPage(ctx, clean, 1), getPlan(ctx)]);
   const r = must(await ctx.db.rpc('create_correction', { p_parent: parentId, p_filters: clean.filters })) as { id?: string; error?: string };
   if (r.error === 'not_found') throw new HttpError(404, 'That search was not found.');
   if (r.error === 'cap') throw new HttpError(429, "The free plan allows 10 filter changes per search, and this one has used them. Upgrade to keep refining.");
-  return firstPage(ctx, r.id!, clean);
+  return { search_id: r.id!, filters: clean.filters, ...page, searches_remaining: plan.searches_remaining };
 }
 
 /** Saved re-run: the server loads the stored filters (never the browser's); no AI; uses a search. */

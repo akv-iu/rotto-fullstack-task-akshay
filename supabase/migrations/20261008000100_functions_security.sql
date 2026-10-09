@@ -118,10 +118,12 @@ begin
   return found;
 end $$;
 
-create function public.refund_search(p_search uuid) returns boolean
+-- Server only (see grants): the server refunds after its own AI call failed. A recruiter could otherwise refund an
+-- in-flight search and reserve another, paying for unlimited AI calls on one free search.
+create function public.refund_search(p_search uuid, p_company uuid) returns boolean
 language plpgsql security definer set search_path = ''
 as $$
-declare cid uuid := public.current_company_id();
+declare cid uuid := p_company;
 begin
   -- Only a search still waiting on the AI can be refunded; a finished one never can.
   update public.searches set status = 'refunded'
@@ -229,9 +231,10 @@ grant select, insert, delete on public.shortlist_members, public.saved_briefs to
 grant execute on function
   public.current_company_id(), public.f_arr(jsonb, text), public.f_num(jsonb, text), public.f_txt(jsonb, text),
   public.filters_have_conditions(jsonb),
-  public.reserve_search(text), public.complete_search(uuid, jsonb), public.refund_search(uuid),
+  public.reserve_search(text), public.complete_search(uuid, jsonb),
   public.create_correction(uuid, jsonb)
 to authenticated;
 grant execute on function public.apply_billing_event(text, bigint, text, text, text, text), public.search_candidates(jsonb, int, int),
+  public.refund_search(uuid, uuid),
   public.f_arr(jsonb, text), public.f_num(jsonb, text), public.f_txt(jsonb, text), public.filters_have_conditions(jsonb)
 to service_role;

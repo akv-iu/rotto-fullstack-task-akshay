@@ -72,7 +72,8 @@ function SearchView() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [moreState, setMoreState] = useState<'idle' | 'loading' | 'error'>('idle');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  const lastRequest = useRef<{ body: object; kind: 'searching' | 'refining' } | null>(null);
+  // What "Try again" repeats: the last search with the brief it was for, or the last restore that failed.
+  const retry = useRef<(() => void) | null>(null);
   const startedFromSaved = useRef(false);
   const restored = useRef<string | null>(cached?.result.search_id ?? null);
   // Each request that replaces the results takes a number; an answer is used only if no newer request started since
@@ -96,7 +97,7 @@ function SearchView() {
   const run = useCallback(async (body: object, kind: 'searching' | 'refining', label: string) => {
     const mine = ++latest.current;
     running.current = true;
-    lastRequest.current = { body, kind };
+    retry.current = () => run(body, kind, label); // keeps the brief this request was for (not whatever is typed now)
     setStatus(kind); setError(null); setSaveState('idle'); setMoreState('idle');
     try {
       const r = await api<SearchResponse>('/api/search', { method: 'POST', body });
@@ -118,6 +119,27 @@ function SearchView() {
     }
   }, [openUpgrade, refreshPlan, result, router]);
 
+  const restore = useCallback((id: string) => {
+    restored.current = id;
+    const mine = ++latest.current;
+    setStatus('refining'); setError(null);
+    api<PageResponse>(`/api/search/${id}?page=1`)
+      .then((r) => {
+        if (mine !== latest.current) return;
+        setResult({ search_id: id, filters: r.filters, total: r.total, results: r.results, searches_remaining: null });
+        setRows(r.results); setPage(1); setStatus('done');
+        const saved = readBrief(id); setSearchedBrief(saved); setBrief(saved); // show what these results are for
+      })
+      .catch((e: ApiError) => {
+        if (mine !== latest.current) return;
+        // Gone or not ours (e.g. another company's search after a sign-in switch): forget it. Anything else is
+        // temporary: keep it (a free user may have no other way back to their one search) and offer a retry.
+        if (e.status === 404 || e.status === 400) { rememberLast(null); setStatus('idle'); router.replace('/'); return; }
+        retry.current = () => restore(id);
+        setError("We couldn't load your last search."); setStatus('error');
+      });
+  }, [router]);
+
   // Restore /?search=<id> (after navigating away, or a reload). Paging never uses a search.
   // Plain / (the Search tab) brings back this tab's last search; typing a new brief still starts a new one.
   // /?new (the Rotto logo) shows an empty search; the last search stays remembered for the Search tab.
@@ -135,18 +157,8 @@ function SearchView() {
       return;
     }
     if (!id || restored.current === id) return;
-    restored.current = id;
-    const mine = ++latest.current;
-    setStatus('refining');
-    api<PageResponse>(`/api/search/${id}?page=1`)
-      .then((r) => {
-        if (mine !== latest.current) return;
-        setResult({ search_id: id, filters: r.filters, total: r.total, results: r.results, searches_remaining: null });
-        setRows(r.results); setPage(1); setStatus('done');
-        const saved = readBrief(id); setSearchedBrief(saved); setBrief(saved); // show what these results are for
-      })
-      .catch(() => { if (mine !== latest.current) return; rememberLast(null); setStatus('idle'); router.replace('/'); }); // e.g. another company's search after a sign-in switch
-  }, [params, router]);
+    restore(id);
+  }, [params, router, restore]);
 
   // Re-run a saved search: /?saved=<id>&brief=<text> (from the Saved searches page). Guarded for React StrictMode.
   useEffect(() => {
@@ -190,7 +202,7 @@ function SearchView() {
   }
 
   async function save() {
-    if (!result) return;
+    if (!result || status !== 'done') return; // while results are being replaced, the button would save the old ones
     const mine = latest.current; // a refine since then means the button now belongs to a search that wasn't saved
     setSaveState('saving');
     try {
@@ -234,7 +246,7 @@ function SearchView() {
         {status === 'searching' && <SearchingSkeleton />}
         {status === 'refining' && !result && <RowSkeletons />}
         {status === 'error' && error && (
-          <ErrorBar message={error} onRetry={lastRequest.current ? () => run(lastRequest.current!.body, lastRequest.current!.kind, searchedBrief || brief) : undefined} />
+          <ErrorBar message={error} onRetry={retry.current ?? undefined} />
         )}
 
         {result && status !== 'searching' && (
@@ -245,7 +257,7 @@ function SearchView() {
                 {status === 'refining' ? 'Updating…' : `${result.total} ${result.total === 1 ? 'person matches' : 'people match'} all filters`}
               </span>
               {/* Only a search that can return people is worth saving: a re-run uses a search (FR-7.2). */}
-              <Button onClick={save} disabled={!savable || saveState === 'saving' || saveState === 'saved'}>
+              <Button onClick={save} disabled={!savable || status !== 'done' || saveState === 'saving' || saveState === 'saved'}>
                 {saveState === 'saved' ? 'Saved' : saveState === 'error' ? 'Try saving again' : 'Save search'}
               </Button>
             </div>

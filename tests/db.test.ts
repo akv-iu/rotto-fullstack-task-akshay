@@ -106,17 +106,29 @@ describe('quota functions', () => {
     expect(ids.filter(Boolean)).toHaveLength(1);
   });
 
-  it('refund_search only refunds a pending search', async () => {
+  // Only the server refunds (after its own AI call failed), and only that company's pending search.
+  const refund = async (p_search: string, p_company: string) => (await admin().rpc('refund_search', { p_search, p_company })).data;
+
+  it('refund_search only refunds a pending search of the given company', async () => {
     const t = await signIn('acme');
     const id = await rpc(t, 'reserve_search', { p_brief: 'x' });
     expect(await rpc(t, 'complete_search', { p_search: id, p_filters: { roles: ['Recruiter'] } })).toBe(true);
-    expect(await rpc(t, 'refund_search', { p_search: id })).toBe(false);
+    expect(await refund(id, COMPANY.acme)).toBe(false);
     expect(await rpc(t, 'reserve_search', { p_brief: 'y' })).toBeNull();
 
     await resetCompany('acme');
     const pending = await rpc(t, 'reserve_search', { p_brief: 'x' });
-    expect(await rpc(t, 'refund_search', { p_search: pending })).toBe(true);
+    expect(await refund(pending, COMPANY.globex)).toBe(false); // another company's search
+    expect(await refund(pending, COMPANY.acme)).toBe(true);
     expect(await rpc(t, 'reserve_search', { p_brief: 'y' })).toBeTruthy();
+  });
+
+  it('a recruiter cannot refund their own in-flight search to get another one', async () => {
+    const db = asUser(await signIn('acme'));
+    const pending = (await db.rpc('reserve_search', { p_brief: 'x' })).data;
+    expect((await db.rpc('refund_search', { p_search: pending, p_company: COMPANY.acme })).error?.code).toBe('42501');
+    expect((await db.rpc('refund_search', { p_search: pending })).error).toBeTruthy();
+    expect((await db.rpc('reserve_search', { p_brief: 'y' })).data).toBeNull(); // still used
   });
 
   it('create_correction allows 10 corrections per root, then reports the cap', async () => {

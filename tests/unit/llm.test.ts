@@ -265,6 +265,22 @@ describe('briefToFilters', () => {
     }
   });
 
+  it('explicit roles survive clean-up: non-engineering roles next to a technology, and "any engineers, including X"', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key');
+    const eng = ['Backend Engineer', 'Data Engineer', 'DevOps Engineer', 'Frontend Engineer', 'Full Stack Engineer', 'Machine Learning Engineer', 'Mobile Engineer'];
+    const keep: [string, Record<string, unknown>][] = [
+      ['data scientists who are also Python developers', { roles: ['Data Scientist'], skills: ['Python'] }],
+      ['product managers who are SQL developers', { roles: ['Product Manager'], skills: ['SQL'] }],
+      ['recruiters and Python developers', { roles: ['Recruiter'], skills: ['Python'] }],
+      ['any engineers in Denver, including backend engineers', { roles: eng, cities: ['Denver'] }],
+      ['all engineers such as full stack engineers', { roles: eng }],
+    ];
+    for (const [brief, model] of keep) {
+      vi.stubGlobal('fetch', reply(JSON.stringify(model)));
+      expect(await briefToFilters(brief), brief).toEqual(model);
+    }
+  });
+
   it('a shared skill requirement on both sides of "or" is one search', async () => {
     vi.stubEnv('OPENAI_API_KEY', 'test-key');
     const model = { roles: ['Backend Engineer', 'DevOps Engineer'], skills: ['Go', 'Kubernetes'] };

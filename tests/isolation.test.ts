@@ -75,7 +75,7 @@ describe('acme cannot change anything it does not own, directly through Supabase
     // server's key (recruiters can't insert at all, so this is the server-side guarantee). 23503 = foreign key violation.
     expect((await admin().from('shortlist_members').insert({ shortlist_id: globexList, company_id: COMPANY.acme, candidate_id: 'cand_0002' })).error?.code).toBe('23503');
     await acme.rpc('complete_search', { p_search: globexSearch, p_filters: {} });
-    await acme.rpc('refund_search', { p_search: globexSearch });
+    await acme.rpc('refund_search', { p_search: globexSearch, p_company: COMPANY.globex });
     expect(await snapshot()).toEqual(before);
   });
 
@@ -100,7 +100,7 @@ describe('acme cannot cheat its own plan or quota', () => {
     const acmeSearches = async () => (await admin().from('searches').select('id', { count: 'exact', head: true }).eq('company_id', COMPANY.acme)).count;
     const searchesBefore = await acmeSearches();
     expect((await acme.from('searches').insert({ company_id: COMPANY.acme, brief: 'x', status: 'ready', filters: {} })).error?.code).toBe('42501');
-    expect((await acme.rpc('refund_search', { p_search: acmeReady })).data).toBe(false);
+    expect((await acme.rpc('refund_search', { p_search: acmeReady, p_company: COMPANY.acme })).error?.code).toBe('42501');
     expect(await acmeSearches()).toBe(searchesBefore);
     const { data } = await admin().from('companies').select('plan, searches_used').eq('id', COMPANY.acme).single();
     expect(data).toEqual({ plan: 'free', searches_used: 1 });

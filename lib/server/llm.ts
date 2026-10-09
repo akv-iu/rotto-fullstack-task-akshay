@@ -117,7 +117,9 @@ function dropTechnologyRoles(out: Record<string, unknown>, brief: string) {
   const text = withoutExclusions(brief.toLowerCase());
   const excluded = Array.isArray(out.not_roles) ? out.not_roles : [];
   const pure = out.roles.every((r) => excluded.includes(r));
-  const named = out.roles.filter((r) => typeof r === 'string' && (pure || !excluded.includes(r)) && roleNamed(r, text));
+  // Only engineering roles can be guessed from a technology; "data scientists who are Python developers" keeps its role.
+  const named = out.roles.filter((r) => typeof r === 'string'
+    && (!(ENGINEERING_ROLES as readonly string[]).includes(r) || ((pure || !excluded.includes(r)) && roleNamed(r, text))));
   if (named.length) out.roles = named; else delete out.roles;
 }
 
@@ -146,6 +148,7 @@ function engineeringRolesNamed(out: Record<string, unknown>, brief: string): str
 function narrowNamedRoles(out: Record<string, unknown>, brief: string) {
   const roles = out.roles;
   if (!Array.isArray(roles) || !ENGINEERING_ROLES.every((r) => roles.includes(r))) return;
+  if (/\b(any|all|every|including|such as|e\.g\.)\b/i.test(brief)) return; // "any engineers, including backend" means all
   const named = engineeringRolesNamed(out, brief);
   if (named.length) out.roles = roles.filter((r) => !ENGINEERING_ROLES.includes(r) || named.includes(r));
 }
