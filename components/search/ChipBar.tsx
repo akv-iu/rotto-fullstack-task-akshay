@@ -60,7 +60,7 @@ function ChipView({ chip, filters, onChange, disabled }: { chip: Chip } & Props)
         <Popover.Portal>
           <Popover.Content sideOffset={6} align="start" className={POPOVER}>
             {chip.kind === 'group' ? (
-              <OptionPicker listKey="roles" onPick={(v) => { setOpen(false); onChange(replaceGroup(filters, v)); }} />
+              <OptionPicker listKey={chip.key} onPick={(v) => { setOpen(false); onChange(replaceGroup(filters, v, chip.key)); }} />
             ) : chip.kind === 'list' ? (
               <OptionPicker listKey={chip.key} selected={chip.value}
                 onPick={(v) => { setOpen(false); onChange(replaceValue(filters, chip.key, chip.value, v)); }} />

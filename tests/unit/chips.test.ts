@@ -7,6 +7,17 @@ const f = {
 };
 
 describe('chip model', () => {
+  it('groups "not engineers" into one chip, and shows "worked at all of" per company', () => {
+    const eng = ['Backend Engineer', 'Data Engineer', 'DevOps Engineer', 'Frontend Engineer', 'Full Stack Engineer', 'Machine Learning Engineer', 'Mobile Engineer'];
+    const chips = chipsOf({ cities: ['Boston'], not_roles: eng, all_companies: ['Fernway', 'Saltbox'] });
+    expect(chips.map((c) => (c.kind === 'unsupported' ? '' : `${c.label}:${c.text}`))).toEqual([
+      'Not a:Any engineer', 'City:Boston', 'Worked at all of:Fernway', 'Worked at all of:Saltbox',
+    ]);
+    const group = chips.find((c) => c.kind === 'group')!;
+    expect(removeChip({ cities: ['Boston'], not_roles: [...eng, 'Recruiter'] }, group)).toEqual({ cities: ['Boston'], not_roles: ['Recruiter'] });
+    expect(replaceGroup({ not_roles: eng }, 'Recruiter', 'not_roles')).toEqual({ not_roles: ['Recruiter'] });
+  });
+
   it('shows exclusions as their own chips', () => {
     const chips = chipsOf({ roles: ['Recruiter'], not_skills: ['Java'], not_companies: ['Saltbox'], never_company_type: 'startup' });
     expect(chips.map((c) => (c.kind === 'unsupported' ? '' : `${c.label}:${c.text}`))).toEqual([

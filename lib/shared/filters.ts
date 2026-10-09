@@ -6,12 +6,14 @@ export type CompanyType = 'startup' | 'enterprise';
 
 export type Filters = {
   roles?: string[];
+  not_roles?: string[]; // none of these roles
   seniorities?: string[];
   cities?: string[];
   skills?: string[]; // must have ALL
   any_skills?: string[]; // must have AT LEAST ONE
   not_skills?: string[]; // must have NONE of them
   companies?: string[]; // any job in the history
+  all_companies?: string[]; // worked at EVERY one of them (any jobs)
   current_companies?: string[];
   not_companies?: string[]; // never worked at any of them (any job)
   degrees?: string[];
@@ -29,12 +31,14 @@ export type Filters = {
 /** Which allowed-value list each list filter is checked against. */
 export const LIST_KEYS = {
   roles: 'roles',
+  not_roles: 'roles',
   seniorities: 'seniorities',
   cities: 'cities',
   skills: 'skills',
   any_skills: 'skills',
   not_skills: 'skills',
   companies: 'companies',
+  all_companies: 'companies',
   current_companies: 'companies',
   not_companies: 'companies',
   degrees: 'degrees',
@@ -47,12 +51,14 @@ export const MAX_YEARS = 15;
 
 export const CHIP_LABELS: Record<Exclude<keyof Filters, 'unsupported'>, string> = {
   roles: 'Role',
+  not_roles: 'Not a',
   seniorities: 'Seniority',
   cities: 'City',
   skills: 'Skill',
   any_skills: 'Any of',
   not_skills: "Doesn't know",
   companies: 'Worked at',
+  all_companies: 'Worked at all of',
   current_companies: 'Currently at',
   not_companies: 'Never worked at',
   degrees: 'Degree',
@@ -98,8 +104,8 @@ export function cleanFilters(input: unknown): { filters: Filters; runnable: bool
       const kept = [...new Set(values.data.filter((v) => allowed.includes(v)))];
       for (const v of values.data) if (!allowed.includes(v)) reject(v);
       // Every possible value ("all 10 cities") narrows nothing, so it is dropped: listing everything can't fetch everyone.
-      // Not for `skills` ("has ALL of these") or the exclusions ("has NONE of these"): those still narrow.
-      const narrowsNothing = !['skills', 'not_skills', 'not_companies'].includes(key) && kept.length === allowed.length;
+      // Not for the "ALL of these" lists or the exclusions ("NONE of these"): those still narrow.
+      const narrowsNothing = !['skills', 'all_companies', 'not_skills', 'not_companies', 'not_roles'].includes(key) && kept.length === allowed.length;
       if (kept.length && !narrowsNothing) filters[key as ListKey] = kept;
     } else if (key === 'min_years' || key === 'max_years') {
       const n = years.safeParse(value);

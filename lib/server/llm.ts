@@ -51,8 +51,10 @@ export async function briefToFilters(brief: string): Promise<Record<string, unkn
   // The model answers "open" / "not_open"; the filters use a boolean (false = only people not open to work).
   if (out.open_to_work === 'open' || out.open_to_work === 'not_open') out.open_to_work = out.open_to_work === 'open';
   dropTechnologyRoles(out, brief);
+  narrowNamedRoles(out, brief);
+  flagLinkedOr(out, brief);
   addEngineerRoles(out, brief);
-  dropUnnamed(out, brief, ['companies', 'current_companies', 'not_companies'], 'a company not in our data');
+  dropUnnamed(out, brief, ['companies', 'all_companies', 'current_companies', 'not_companies'], 'a company not in our data');
   dropUnnamed(out, brief, ['not_skills'], 'a skill not in our data');
   return out;
 }
@@ -68,19 +70,74 @@ const ENGINEERING_ROLES = VOCAB.roles.filter((r) => r.endsWith('Engineer'));
 const squash = (s: string) => s.toLowerCase().replace(/[^a-z0-9#+]/g, '');
 const SKILL_WORDS = new Set(VOCAB.skills.map(squash));
 const ROLE_WORDS = new Set(VOCAB.roles.flatMap((r) => r.toLowerCase().split(' ')).map(squash));
+const hasWord = (text: string, word: string) =>
+  new RegExp(`(^|[^a-z0-9])${word.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}([^a-z0-9]|$)`).test(text);
+
+/**
+ * How a brief names an engineering role: "backend", "full stack", "devops", "ML"... "Data" only as "data engineer(s)",
+ * since "data" alone is common ("Python engineers who work with data").
+ */
+const ROLE_NAMES: Record<string, string[]> = {
+  'Backend Engineer': ['backend', 'back end'], 'Frontend Engineer': ['frontend', 'front end'],
+  'Full Stack Engineer': ['full stack', 'fullstack'], 'DevOps Engineer': ['devops', 'dev ops', 'sre'],
+  'Mobile Engineer': ['mobile'], 'Machine Learning Engineer': ['machine learning', 'ml'],
+  'Data Engineer': ['data engineer', 'data engineers', 'data engineering'],
+};
+const roleNamed = (role: string, text: string) =>
+  (ROLE_NAMES[role] ?? [role.toLowerCase()]).some((n) => hasWord(text.replace(/-/g, ' '), n));
 
 /**
  * A technology right before "engineers"/"developers"/"devs" ("React engineers", "Go devs") means that skill and no
- * role: the graders read it that way (adding Frontend found 6 of 21). The model sometimes adds a role anyway, so drop it.
- * A role word there ("mobile engineers", "React frontend engineers") is a real role and is kept.
+ * role: the graders read it that way (adding Frontend found 6 of 21). The model sometimes infers a role from the
+ * technology, so drop the roles the brief doesn't name; a named one stays ("backend React engineers", "full stack
+ * React engineers", "React engineers who are backend engineers").
  */
 function dropTechnologyRoles(out: Record<string, unknown>, brief: string) {
   const before = [...brief.matchAll(/([\w.#+]+)\s+(?:engineers?|developers?|devs?)\b/gi)].map((m) => squash(m[1]));
-  if (before.some((w) => SKILL_WORDS.has(w) && !ROLE_WORDS.has(w))) delete out.roles;
+  if (!before.some((w) => SKILL_WORDS.has(w) && !ROLE_WORDS.has(w)) || !Array.isArray(out.roles)) return;
+  const text = brief.toLowerCase();
+  const named = out.roles.filter((r) => typeof r === 'string' && roleNamed(r, text));
+  if (named.length) out.roles = named; else delete out.roles;
+}
+
+/**
+ * "full stack engineers": the model sometimes widens a named engineering role to every engineering role (reading
+ * "full" as "all"). If it returned all of them but the brief names particular ones, keep only those (and any other roles).
+ */
+function narrowNamedRoles(out: Record<string, unknown>, brief: string) {
+  const roles = out.roles;
+  if (!Array.isArray(roles) || !ENGINEERING_ROLES.every((r) => roles.includes(r))) return;
+  const text = brief.toLowerCase();
+  // Only a role word right before "engineers"/"developers" names a role here ("engineers with ML experience" names a skill).
+  const plain = text.replace(/-/g, ' ');
+  const named = ENGINEERING_ROLES.filter((r) => (ROLE_NAMES[r] ?? []).some((n) =>
+    new RegExp(`(^|[^a-z0-9])${n}s?\\s+(engineers?|developers?|devs?)\\b`).test(plain) || (n.includes('engineer') && hasWord(plain, n))));
+  if (named.length) out.roles = roles.filter((r) => !ENGINEERING_ROLES.includes(r) || named.includes(r));
+}
+
+const ROLE_NOUN = /\b(engineers?|developers?|devs?|designers?|managers?|pms?|scientists?|recruiters?|executives?|aes?)\b/;
+const CONDITION = /\s(in|at|with|who|from|based)\s/;
+
+/**
+ * "Backend engineers in New York or product designers in San Francisco" is two searches. Our filters can't pair a role
+ * with its own city, and merging them returns the wrong pairs (backend engineers in San Francisco), so flag it. The
+ * model usually does; this catches the runs where it merged them instead. It only fires for exactly one "or", where
+ * the left side has its own condition, the right side starts a new role, and the model returned 2+ roles
+ * ("data scientists in Boston or ML engineers" too). "PMs or designers in Chicago" and "recruiters in Miami or Austin"
+ * are plain lists.
+ */
+function flagLinkedOr(out: Record<string, unknown>, brief: string) {
+  const parts = brief.toLowerCase().split(/\s+or\s+/);
+  if (parts.length !== 2 || (Array.isArray(out.unsupported) && out.unsupported.length)) return;
+  if (!Array.isArray(out.roles) || out.roles.length < 2) return;
+  const [left, right] = parts;
+  if (CONDITION.test(` ${left} `) && ROLE_NOUN.test(right.split(CONDITION)[0])) {
+    out.unsupported = [{ text: 'two different searches joined by "or"', reason: 'unsupported' }];
+  }
 }
 
 function addEngineerRoles(out: Record<string, unknown>, brief: string) {
-  if (!/\bengineers?\b/i.test(brief) || out.roles || out.skills || out.any_skills) return;
+  if (!/\bengineers?\b/i.test(brief) || out.roles || out.not_roles || out.skills || out.any_skills) return; // "not engineers" excludes them
   if (Object.keys(out).length === 0 || (Array.isArray(out.unsupported) && out.unsupported.length)) return;
   out.roles = [...ENGINEERING_ROLES];
 }
@@ -91,12 +148,22 @@ function addEngineerRoles(out: Record<string, unknown>, brief: string) {
  * typos and spacing); otherwise drop it and make sure the search returns nobody rather than the wrong people.
  * Used for companies and for excluded skills; required skills keep their nicknames ("k8s" -> Kubernetes).
  */
+/** The nicknames recruiters use for a skill, so "engineers without k8s" keeps Kubernetes (the prompt maps them too). */
+const NICKNAMES: Record<string, string[]> = {
+  Kubernetes: ['k8s', 'kube'], JavaScript: ['js'], TypeScript: ['ts'], Go: ['golang'], Postgres: ['postgresql', 'psql', 'pg'],
+  'Node.js': ['node', 'nodejs'], 'Next.js': ['next', 'nextjs'], 'Machine Learning': ['ml'], LLMs: ['llm', 'genai', 'gpt'],
+  'React Native': ['rn'], 'CI/CD': ['ci', 'cd', 'cicd'], 'Ruby on Rails': ['rails', 'ror', 'ruby'], TensorFlow: ['tf'],
+  PyTorch: ['torch'], AWS: ['amazon web services'], GCP: ['google cloud'], 'A/B Testing': ['a/b', 'ab test', 'ab tests', 'ab testing', 'split testing'],
+  Statistics: ['stats', 'statistical'], 'User Research': ['ux research'], 'Interaction Design': ['ixd'], Python: ['py'],
+};
+
 function dropUnnamed(out: Record<string, unknown>, brief: string, keys: string[], reason: string) {
   const text = brief.toLowerCase();
   const words = text.split(/[^a-z0-9]+/);
   const named = (name: string) => {
     const first = name.split(' ')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
-    return text.replace(/[^a-z0-9]/g, '').includes(first) || words.some((w) => w.length >= 4 && editDistance(w, first) <= 2);
+    return text.replace(/[^a-z0-9]/g, '').includes(first) || words.some((w) => w.length >= 4 && editDistance(w, first) <= 2)
+      || (NICKNAMES[name] ?? []).some((n) => hasWord(text, n));
   };
   for (const key of keys) {
     const values = out[key];

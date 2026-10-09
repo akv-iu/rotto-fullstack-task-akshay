@@ -14,7 +14,7 @@ afterAll(async () => {
 
 const hasKey = Boolean(process.env.OPENAI_API_KEY);
 const samples: { brief: string; expected_ids: string[] }[] = JSON.parse(readFileSync('data/queries.json', 'utf8'));
-const extra: { brief: string; expect?: Record<string, unknown>; zero?: boolean; absent?: string[] }[] = JSON.parse(readFileSync('tests/briefs.extra.json', 'utf8'));
+const extra: { brief: string; expect?: Record<string, unknown>; zero?: boolean; absent?: string[]; count?: number }[] = JSON.parse(readFileSync('tests/briefs.extra.json', 'utf8'));
 
 let token: string;
 // Row counts before any brief runs. Searches only ever add `searches` rows, so every other table must end up identical.
@@ -58,12 +58,14 @@ describe.runIf(hasKey)('accuracy (the grader\'s method)', () => {
     expect({ precision, recall }).toEqual({ precision: 1, recall: 1 });
   });
 
-  it.each(extra)('extra: $brief', async ({ brief, expect: want, zero, absent }) => {
+  it.each(extra)('extra: $brief', async ({ brief, expect: want, zero, absent, count }) => {
     const { filters, total } = await searchAll(brief);
     // A name that isn't in the data must not be swapped for a look-alike one ("Salesforce" -> "Saltbox").
     for (const key of absent ?? []) expect(filters, `${key} should not be set`).not.toHaveProperty(key);
     if (zero) expect(total).toBe(0);
-    else expect(sorted(filters)).toBe(sorted(want!));
+    // `count`: how many people the data says match, counted straight from the candidate rows (end to end, not just filters).
+    if (count !== undefined) expect(total).toBe(count);
+    if (want) expect(sorted(filters)).toBe(sorted(want));
   });
 
   it('hostile briefs changed no data (X4)', async () => {

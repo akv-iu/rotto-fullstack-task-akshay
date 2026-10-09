@@ -4,12 +4,12 @@ import { VOCAB } from '@/lib/shared/vocab';
 export type ScalarKey = 'min_years' | 'max_years' | 'open_to_work' | 'worked_at_company_type' | 'current_company_type' | 'never_company_type';
 export type Chip =
   | { kind: 'list'; key: ListKey; value: string; label: string; text: string }
-  | { kind: 'group'; key: 'roles'; values: readonly string[]; label: string; text: string }
+  | { kind: 'group'; key: 'roles' | 'not_roles'; values: readonly string[]; label: string; text: string }
   | { kind: 'scalar'; key: ScalarKey; label: string; text: string }
   | { kind: 'unsupported'; index: number; text: string; reason: 'unsupported' | 'unclear' };
 
 // Display order: who, where, what they know, where they worked, education.
-const ORDER: ListKey[] = ['roles', 'seniorities', 'cities', 'skills', 'any_skills', 'not_skills', 'companies', 'current_companies', 'not_companies', 'degrees', 'fields', 'schools'];
+const ORDER: ListKey[] = ['roles', 'not_roles', 'seniorities', 'cities', 'skills', 'any_skills', 'not_skills', 'companies', 'all_companies', 'current_companies', 'not_companies', 'degrees', 'fields', 'schools'];
 
 /** Every engineering role. "engineers in Texas" sets all of them; one chip reads better than seven. */
 export const ENGINEERING_ROLES: readonly string[] = VOCAB.roles.filter((r) => r.endsWith('Engineer'));
@@ -21,8 +21,8 @@ export function chipsOf(f: Filters): Chip[] {
   const chips: Chip[] = [];
   for (const key of ORDER) {
     let values = f[key] ?? [];
-    if (key === 'roles' && ENGINEERING_ROLES.every((r) => values.includes(r))) {
-      chips.push({ kind: 'group', key: 'roles', values: ENGINEERING_ROLES, label: CHIP_LABELS.roles, text: 'Any engineer' });
+    if ((key === 'roles' || key === 'not_roles') && ENGINEERING_ROLES.every((r) => values.includes(r))) {
+      chips.push({ kind: 'group', key, values: ENGINEERING_ROLES, label: CHIP_LABELS[key], text: 'Any engineer' });
       values = values.filter((v) => !ENGINEERING_ROLES.includes(v));
     }
     for (const value of values) chips.push({ kind: 'list', key, value, label: CHIP_LABELS[key], text: display(key, value) });
@@ -68,8 +68,8 @@ export function setScalar<K extends ScalarKey>(f: Filters, key: K, value: Filter
 }
 
 /** Picking one role on the "Any engineer" chip replaces the whole group with that role. */
-export function replaceGroup(f: Filters, role: string): Filters {
+export function replaceGroup(f: Filters, role: string, key: 'roles' | 'not_roles' = 'roles'): Filters {
   const next: Filters = structuredClone(f);
-  next.roles = [...new Set([...(next.roles ?? []).filter((r) => !ENGINEERING_ROLES.includes(r)), role])];
+  next[key] = [...new Set([...(next[key] ?? []).filter((r) => !ENGINEERING_ROLES.includes(r)), role])];
   return next;
 }

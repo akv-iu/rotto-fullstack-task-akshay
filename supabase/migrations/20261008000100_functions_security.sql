@@ -30,6 +30,7 @@ as $$
     or public.f_arr(f, 'current_companies') is not null or public.f_arr(f, 'degrees') is not null
     or public.f_arr(f, 'fields') is not null or public.f_arr(f, 'schools') is not null
     or public.f_arr(f, 'not_skills') is not null or public.f_arr(f, 'not_companies') is not null
+    or public.f_arr(f, 'not_roles') is not null or public.f_arr(f, 'all_companies') is not null
     or public.f_txt(f, 'never_company_type') is not null
     or coalesce(public.f_num(f, 'min_years'), 0) > 0 or coalesce(public.f_num(f, 'max_years'), 15) < 15
     or jsonb_typeof(f -> 'open_to_work') = 'boolean'  -- true: open to work; false: not open
@@ -47,6 +48,7 @@ as $$
            public.f_arr(f, 'current_companies') current_companies, public.f_arr(f, 'degrees') degrees,
            public.f_arr(f, 'fields') fields, public.f_arr(f, 'schools') schools,
            public.f_arr(f, 'not_skills') not_skills, public.f_arr(f, 'not_companies') not_companies,
+           public.f_arr(f, 'not_roles') not_roles, public.f_arr(f, 'all_companies') all_companies,
            public.f_txt(f, 'never_company_type') never_type,
            public.f_num(f, 'min_years') min_years, public.f_num(f, 'max_years') max_years,
            case when jsonb_typeof(f -> 'open_to_work') = 'boolean' then (f ->> 'open_to_work')::boolean end want_open,
@@ -75,6 +77,8 @@ as $$
       and (p.current_type is null or c.current_company_type = p.current_type)
       and (p.not_skills is null or not c.skills && p.not_skills)
       and (p.not_companies is null or not c.companies && p.not_companies)
+      and (p.not_roles is null or not c.role = any (p.not_roles))
+      and (p.all_companies is null or c.companies @> p.all_companies)
       and (p.never_type is null or not c.company_types @> array[p.never_type])
   ),
   -- Last line of defence: filters that match every candidate (e.g. all 10 cities, however they got past the app's

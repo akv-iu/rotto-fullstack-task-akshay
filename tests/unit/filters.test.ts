@@ -31,6 +31,15 @@ describe('cleanFilters', () => {
     expect(cleanFilters({ never_company_type: 'big' })!.runnable).toBe(false);
   });
 
+  it('keeps "worked at ALL of these companies" and excluded roles', () => {
+    expect(cleanFilters({ all_companies: ['Fernway', 'Saltbox'], not_roles: ['Frontend Engineer'] })).toEqual({
+      filters: { all_companies: ['Fernway', 'Saltbox'], not_roles: ['Frontend Engineer'] }, runnable: true,
+    });
+    // Neither narrows nothing when it lists every value: "worked at all 28" and "none of the 13 roles" find (almost) nobody.
+    expect(cleanFilters({ not_roles: [...VOCAB.roles] })!.filters.not_roles).toHaveLength(VOCAB.roles.length);
+    expect(cleanFilters({ all_companies: [...VOCAB.companies] })!.filters.all_companies).toHaveLength(VOCAB.companies.length);
+  });
+
   it('keeps open_to_work false as a real filter ("not open to work")', () => {
     expect(cleanFilters({ roles: ['Recruiter'], open_to_work: false })).toEqual({ filters: { roles: ['Recruiter'], open_to_work: false }, runnable: true });
     expect(cleanFilters({ open_to_work: true })).toEqual({ filters: { open_to_work: true }, runnable: true });

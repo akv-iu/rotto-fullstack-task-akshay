@@ -191,9 +191,12 @@ function SearchView() {
 
   async function save() {
     if (!result) return;
+    const mine = latest.current; // a refine since then means the button now belongs to a search that wasn't saved
     setSaveState('saving');
-    try { await api('/api/saved-briefs', { method: 'POST', body: { brief: searchedBrief, filters: result.filters } }); setSaveState('saved'); }
-    catch { setSaveState('error'); }
+    try {
+      await api('/api/saved-briefs', { method: 'POST', body: { brief: searchedBrief, filters: result.filters } });
+      if (mine === latest.current) setSaveState('saved');
+    } catch { if (mine === latest.current) setSaveState('error'); }
   }
 
   return (

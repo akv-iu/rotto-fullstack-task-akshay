@@ -81,6 +81,8 @@ describe('briefToFilters', () => {
     expect((await briefToFilters('staff engineers who speak Klingon')).roles).toBeUndefined();
     vi.stubGlobal('fetch', reply(JSON.stringify({ seniorities: ['staff'] })));
     expect(await briefToFilters('staff people in engineering')).toEqual({ seniorities: ['staff'] }); // "engineering" isn't "engineers"
+    vi.stubGlobal('fetch', reply(JSON.stringify({ cities: ['Boston'], not_roles: eng })));
+    expect(await briefToFilters('people in Boston who are not engineers')).toEqual({ cities: ['Boston'], not_roles: eng });
   });
 
   it('"React engineers" means the skill and no role, whatever role the model adds (the graders\' reading)', async () => {
@@ -97,6 +99,82 @@ describe('briefToFilters', () => {
     expect(await briefToFilters('mobile engineers who know Swift')).toEqual({ roles: ['Mobile Engineer'], skills: ['Swift'] });
     vi.stubGlobal('fetch', reply(JSON.stringify({ roles: ['Frontend Engineer'], skills: ['React'] })));
     expect(await briefToFilters('React frontend engineers')).toEqual({ roles: ['Frontend Engineer'], skills: ['React'] });
+  });
+
+  it('keeps a role the brief names, in either word order, even next to a technology', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key');
+    const cases: [string, Record<string, unknown>][] = [
+      ['full stack React engineers', { roles: ['Full Stack Engineer'], skills: ['React'] }],
+      ['backend React engineers', { roles: ['Backend Engineer'], skills: ['React'] }],
+      ['React engineers who are backend engineers', { roles: ['Backend Engineer'], skills: ['React'] }],
+      ['DevOps Python engineers', { roles: ['DevOps Engineer'], skills: ['Python'] }],
+      ['Python ML engineers', { roles: ['Machine Learning Engineer'], skills: ['Python'] }],
+      ['Python data engineers', { roles: ['Data Engineer'], skills: ['Python'] }],
+    ];
+    for (const [brief, model] of cases) {
+      vi.stubGlobal('fetch', reply(JSON.stringify(model)));
+      expect(await briefToFilters(brief), brief).toEqual(model);
+    }
+    // Only the roles the brief doesn't name are dropped.
+    vi.stubGlobal('fetch', reply(JSON.stringify({ roles: ['Full Stack Engineer', 'Frontend Engineer'], skills: ['React'] })));
+    expect(await briefToFilters('full stack React engineers')).toEqual({ roles: ['Full Stack Engineer'], skills: ['React'] });
+    vi.stubGlobal('fetch', reply(JSON.stringify({ roles: ['Data Engineer'], skills: ['Python'] })));
+    expect(await briefToFilters('Python engineers who work with data')).toEqual({ skills: ['Python'] }); // "data" alone isn't "data engineers"
+  });
+
+  it('"full stack engineers" stays Full Stack when the model widens it to every engineering role', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key');
+    const eng = ['Backend Engineer', 'Data Engineer', 'DevOps Engineer', 'Frontend Engineer', 'Full Stack Engineer', 'Machine Learning Engineer', 'Mobile Engineer'];
+    vi.stubGlobal('fetch', reply(JSON.stringify({ roles: eng, cities: ['Denver'] })));
+    expect(await briefToFilters('full stack engineers in Denver')).toEqual({ roles: ['Full Stack Engineer'], cities: ['Denver'] });
+    vi.stubGlobal('fetch', reply(JSON.stringify({ roles: [...eng, 'Recruiter'] })));
+    expect(await briefToFilters('backend engineers and recruiters')).toEqual({ roles: ['Backend Engineer', 'Recruiter'] });
+    // No specific role named: every engineering role is right.
+    vi.stubGlobal('fetch', reply(JSON.stringify({ roles: eng, cities: ['Austin'] })));
+    expect(await briefToFilters('engineers in Texas')).toEqual({ roles: eng, cities: ['Austin'] });
+    // "ML" here is a skill, not the role: only a role word right before "engineers" counts.
+    vi.stubGlobal('fetch', reply(JSON.stringify({ roles: eng, skills: ['Machine Learning'] })));
+    expect(await briefToFilters('engineers with ML experience')).toEqual({ roles: eng, skills: ['Machine Learning'] });
+  });
+
+  it('flags two different searches joined by "or" when the model merged them, and leaves plain "or" lists alone', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key');
+    const merged = (roles: string[], cities: string[]) => reply(JSON.stringify({ roles, cities }));
+    const linked: [string, string[], string[]][] = [
+      ['Backend engineers in New York or product designers in San Francisco', ['Backend Engineer', 'Product Designer'], ['New York', 'San Francisco']],
+      ['recruiters in Miami or account executives in Denver', ['Recruiter', 'Account Executive'], ['Miami', 'Denver']],
+      ['data scientists in Boston or ML engineers', ['Data Scientist', 'Machine Learning Engineer'], ['Boston']],
+    ];
+    for (const [brief, roles, cities] of linked) {
+      vi.stubGlobal('fetch', merged(roles, cities));
+      expect((await briefToFilters(brief)).unsupported, brief).toEqual([{ text: 'two different searches joined by "or"', reason: 'unsupported' }]);
+    }
+    const plain: [string, string[], string[]][] = [
+      ['product managers or designers in Chicago', ['Product Manager', 'Product Designer'], ['Chicago']],
+      ['recruiters in Miami or Austin', ['Recruiter'], ['Miami', 'Austin']],
+      ['backend or frontend engineers in New York or Boston', ['Backend Engineer', 'Frontend Engineer'], ['New York', 'Boston']],
+      ['backend engineers or designers in New York and San Francisco', ['Backend Engineer', 'Product Designer'], ['New York', 'San Francisco']],
+      ['engineers in Austin or Denver', ['Backend Engineer', 'Data Engineer'], ['Austin', 'Denver']],
+    ];
+    for (const [brief, roles, cities] of plain) {
+      vi.stubGlobal('fetch', merged(roles, cities));
+      expect((await briefToFilters(brief)).unsupported, brief).toBeUndefined();
+    }
+  });
+
+  it('accepts common nicknames for an excluded skill ("k8s", "JS", "golang"), but still drops look-alikes', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key');
+    const cases: [string, string][] = [
+      ['engineers without k8s', 'Kubernetes'], ['engineers without JS', 'JavaScript'], ['devs who never used golang', 'Go'],
+      ['no TS please', 'TypeScript'], ['people who don’t know PostgreSQL', 'Postgres'], ['engineers without ML experience', 'Machine Learning'],
+      ['designers who never did A/B tests', 'A/B Testing'], ['no rails', 'Ruby on Rails'], ['analysts without stats', 'Statistics'],
+    ];
+    for (const [brief, skill] of cases) {
+      vi.stubGlobal('fetch', reply(JSON.stringify({ not_skills: [skill] })));
+      expect((await briefToFilters(brief)).not_skills, brief).toEqual([skill]);
+    }
+    vi.stubGlobal('fetch', reply(JSON.stringify({ not_skills: ['Docker'] })));
+    expect((await briefToFilters('people who don’t know Django')).not_skills).toBeUndefined();
   });
 
   it('turns a timeout, an HTTP error, a refusal or bad JSON into LlmError', async () => {

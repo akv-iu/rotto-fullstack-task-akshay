@@ -64,6 +64,15 @@ describe('search_candidates', () => {
     expect(await total({ not_skills: ['Java'] })).toBeGreaterThan(0); // an exclusion alone is a real condition
   });
 
+  it('"worked at all of" and excluded roles match exactly (counted from the data)', async () => {
+    const total = async (f: object) => (await search({ f, lim: 1, off: 0 })).total as number;
+    const engineers = VOCAB.roles.filter((r) => r.endsWith('Engineer'));
+    expect(await total({ all_companies: ['Fernway', 'Saltbox'] })).toBe(9); // both, not either (590)
+    expect(await total({ companies: ['Fernway', 'Saltbox'] })).toBe(590); // "either" still works
+    expect(await total({ cities: ['Boston'], not_roles: engineers })).toBe(152);
+    expect(await total({ seniorities: ['senior'], skills: ['React'], not_roles: ['Frontend Engineer'] })).toBe(68);
+  });
+
   it('matches exactly (data scientists with a PhD = 47)', async () => {
     const r = await search({ f: { roles: ['Data Scientist'], degrees: ['PhD'] }, lim: 20, off: 0 });
     expect(r.total).toBe(47);
