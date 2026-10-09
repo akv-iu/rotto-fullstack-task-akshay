@@ -54,26 +54,10 @@ export async function briefToFilters(brief: string): Promise<Record<string, unkn
   restoreNamedRoles(out, brief);
   narrowNamedRoles(out, brief);
   flagLinkedOr(out, brief);
-  dropRedundantRoleExclusions(out); // before dropExcludedRoles, which removes the excluded ones from `roles`
-  dropExcludedRoles(out);
   addEngineerRoles(out, brief);
   dropUnnamed(out, brief, ['companies', 'all_companies', 'current_companies', 'not_companies'], 'a company not in our data');
   dropUnnamed(out, brief, ['not_skills'], 'a skill not in our data');
   return out;
-}
-
-/**
- * "backend React engineers" once came back with "not" EVERY other engineering role: an invented exclusion (nobody
- * lists all six). Only that exact pattern is removed; it changes nobody's result. A real exclusion ("backend engineers
- * who are not frontend engineers") stays, so it is shown and editable even when it doesn't change the first results.
- */
-function dropRedundantRoleExclusions(out: Record<string, unknown>) {
-  if (!Array.isArray(out.roles) || !Array.isArray(out.not_roles)) return;
-  const roles = out.roles, excluded = out.not_roles;
-  const otherEngineers = ENGINEERING_ROLES.filter((r) => !roles.includes(r));
-  const inventedComplement = otherEngineers.length >= 2 && excluded.length === otherEngineers.length
-    && otherEngineers.every((r) => excluded.includes(r));
-  if (inventedComplement) delete out.not_roles;
 }
 
 const ENGINEERING_ROLES = VOCAB.roles.filter((r) => r.endsWith('Engineer'));
@@ -100,8 +84,22 @@ const ROLE_NAMES: Record<string, string[]> = {
   'Mobile Engineer': ['mobile'], 'Machine Learning Engineer': ['machine learning', 'ml'],
   'Data Engineer': ['data engineer', 'data engineers', 'data engineering'],
 };
-const roleNamed = (role: string, text: string) =>
-  (ROLE_NAMES[role] ?? [role.toLowerCase()]).some((n) => hasWord(text.replace(/-/g, ' '), n));
+/** The brief without its exclusion phrases ("excluding backend engineers", "other than frontend engineers"). */
+const withoutExclusions = (text: string) =>
+  text.replace(/\b(other than|excluding|except( for)?|not|but not|besides|apart from|aside from)\s+([\w.#+/-]+\s+){0,3}?(engineers?|developers?|devs?)\b/g, ' ');
+
+/**
+ * The role word right before "engineers"/"developers"/"devs", with at most two words between: "data Python engineers",
+ * "DevOps Python engineers", "full stack React engineers". "data" elsewhere ("works with data") doesn't count.
+ */
+const namedBeforeEngineers = (role: string, plain: string) =>
+  [...(ROLE_NAMES[role] ?? []).filter((n) => !n.includes('engineer')), role.replace(/ Engineer$/, '').toLowerCase()]
+    .some((n) => new RegExp(`(^|[^a-z0-9])${n}s?(\\s+[\\w.#+/]+){0,2}\\s+(engineers?|developers?|devs?)\\b`).test(plain));
+
+const roleNamed = (role: string, text: string) => {
+  const plain = text.replace(/-/g, ' ');
+  return (ROLE_NAMES[role] ?? [role.toLowerCase()]).some((n) => hasWord(plain, n)) || namedBeforeEngineers(role, plain);
+};
 
 /**
  * A technology right before "engineers"/"developers"/"devs" ("React engineers", "Go devs") means that skill and no
@@ -112,8 +110,14 @@ const roleNamed = (role: string, text: string) =>
 function dropTechnologyRoles(out: Record<string, unknown>, brief: string) {
   const before = [...brief.matchAll(/([\w.#+]+)\s+(?:engineers?|developers?|devs?)\b/gi)].map((m) => squash(m[1]));
   if (!before.some((w) => SKILL_WORDS.has(w) && !ROLE_WORDS.has(w)) || !Array.isArray(out.roles)) return;
-  const text = brief.toLowerCase();
-  const named = out.roles.filter((r) => typeof r === 'string' && roleNamed(r, text));
+  // If the model required only roles it also excluded (a pure contradiction), the wording decides: a role named outside
+  // the exclusion stays ("frontend React engineers excluding frontend engineers": nobody, never more), a role named only
+  // inside it goes ("React engineers other than frontend engineers"). If the wording isn't recognised, the role stays
+  // and the result is empty, never wrong. Otherwise an excluded role is never kept, whatever the wording.
+  const text = withoutExclusions(brief.toLowerCase());
+  const excluded = Array.isArray(out.not_roles) ? out.not_roles : [];
+  const pure = out.roles.every((r) => excluded.includes(r));
+  const named = out.roles.filter((r) => typeof r === 'string' && (pure || !excluded.includes(r)) && roleNamed(r, text));
   if (named.length) out.roles = named; else delete out.roles;
 }
 
@@ -127,11 +131,12 @@ function dropTechnologyRoles(out: Record<string, unknown>, brief: string) {
  * ("engineers with ML experience" names a skill), and never a role the brief excludes ("other than backend engineers").
  */
 function engineeringRolesNamed(out: Record<string, unknown>, brief: string): string[] {
-  const plain = brief.toLowerCase().replace(/-/g, ' ');
+  const plain = withoutExclusions(brief.toLowerCase().replace(/-/g, ' '));
+  // Safeguard that needs no phrase recognition: a role the model excluded is never narrowed to or put back, whatever
+  // the wording ("aren't backend engineers", "excluding backend, frontend and mobile engineers").
   const excluded = Array.isArray(out.not_roles) ? out.not_roles : [];
-  return ENGINEERING_ROLES.filter((r) => !excluded.includes(r) && (ROLE_NAMES[r] ?? []).some((n) =>
-    new RegExp(`(^|[^a-z0-9])${n}s?(\\s+[\\w.#+/]+){0,2}\\s+(engineers?|developers?|devs?)\\b`).test(plain)
-    || (n.includes('engineer') && hasWord(plain, n))));
+  return ENGINEERING_ROLES.filter((r) => !excluded.includes(r)).filter((r) => namedBeforeEngineers(r, plain)
+    || (ROLE_NAMES[r] ?? []).some((n) => n.includes('engineer') && hasWord(plain, n)));
 }
 
 /**
@@ -173,20 +178,16 @@ function flagLinkedOr(out: Record<string, unknown>, brief: string) {
     const role = ROLE_NOUN.exec(side);
     return role !== null && CONDITION.test(` ${side.slice(role.index + role[0].length)} `);
   };
-  // Judged by meaning, not wording: two different searches leave 2+ values in another field ("New York" and "San
-  // Francisco"). The same condition said twice ("in SF" / "in San Francisco", "in Denver" / "based in Denver") leaves
-  // one value, and is a plain list.
-  const differs = SIDE_FIELDS.some((k) => Array.isArray(out[k]) && (out[k] as unknown[]).length >= 2);
+  // Judged by meaning: flag only when each side names a different value the model understood ("New York" on one side,
+  // "San Francisco" on the other). A shared condition, however it is said ("in Denver" / "based in Denver", "SF" /
+  // "San Francisco", "California" -> two cities, "Go and Kubernetes" on both sides), is one search.
+  const named = (side: string) => SIDE_FIELDS.flatMap((k) =>
+    Array.isArray(out[k]) ? (out[k] as unknown[]).filter((v): v is string => typeof v === 'string' && hasWord(side, v.toLowerCase())) : []);
+  const [l, r] = parts.map(named);
+  const differs = l.length > 0 && r.length > 0 && (l.some((v) => !r.includes(v)) || r.some((v) => !l.includes(v)));
   if (parts.every(ownCondition) && differs) out.unsupported = [{ text: 'two different searches joined by "or"', reason: 'unsupported' }];
 }
 
-/** An excluded role is never also required: whatever the clean-up steps above did, the exclusion wins. */
-function dropExcludedRoles(out: Record<string, unknown>) {
-  if (!Array.isArray(out.roles) || !Array.isArray(out.not_roles)) return;
-  const excluded = out.not_roles;
-  const kept = out.roles.filter((r) => !excluded.includes(r));
-  if (kept.length) out.roles = kept; else delete out.roles;
-}
 
 function addEngineerRoles(out: Record<string, unknown>, brief: string) {
   if (!/\bengineers?\b/i.test(brief) || out.roles || out.not_roles || out.skills || out.any_skills) return; // "not engineers" excludes them

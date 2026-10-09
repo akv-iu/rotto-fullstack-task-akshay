@@ -162,6 +162,8 @@ describe('briefToFilters', () => {
       ['recruiters in Denver or account executives in Denver', ['Recruiter', 'Account Executive'], ['Denver']],
       ['recruiters in Denver or account executives based in Denver', ['Recruiter', 'Account Executive'], ['Denver']],
       ['backend engineers in SF or frontend engineers in San Francisco', ['Backend Engineer', 'Frontend Engineer'], ['San Francisco']],
+      // One shared condition can map to several values (a state): still one search.
+      ['Recruiters in California or account executives in California', ['Recruiter', 'Account Executive'], ['Los Angeles', 'San Francisco']],
     ];
     for (const [brief, roles, cities] of plain) {
       vi.stubGlobal('fetch', merged(roles, cities));
@@ -174,9 +176,19 @@ describe('briefToFilters', () => {
     const eng = ['Backend Engineer', 'Data Engineer', 'DevOps Engineer', 'Frontend Engineer', 'Full Stack Engineer', 'Machine Learning Engineer', 'Mobile Engineer'];
     const model = { roles: eng, not_roles: ['Backend Engineer'], cities: ['Boston'] };
     vi.stubGlobal('fetch', reply(JSON.stringify(model)));
-    expect(await briefToFilters('engineers other than backend engineers in Boston')).toEqual({ ...model, roles: eng.filter((r) => r !== 'Backend Engineer') });
+    expect(await briefToFilters('engineers other than backend engineers in Boston')).toEqual(model); // both kept; SQL: 188
     vi.stubGlobal('fetch', reply(JSON.stringify({ roles: ['Frontend Engineer'], skills: ['React'], not_roles: ['Frontend Engineer'] })));
     expect(await briefToFilters('React engineers other than frontend engineers')).toEqual({ skills: ['React'], not_roles: ['Frontend Engineer'] });
+    // Required and excluded are both kept and SQL decides: a contradiction finds nobody (never everyone), and
+    // "backend or frontend, but not backend" finds the frontend engineers.
+    for (const m of [{ roles: ['Backend Engineer'], not_roles: ['Backend Engineer'] }, { roles: ['Backend Engineer', 'Frontend Engineer'], not_roles: ['Backend Engineer'] }]) {
+      vi.stubGlobal('fetch', reply(JSON.stringify(m)));
+      expect(await briefToFilters('backend engineers, excluding backend engineers')).toEqual(m);
+    }
+    // Every exclusion chip stays, however many.
+    const two = { roles: eng, not_roles: ['Backend Engineer', 'Frontend Engineer'] };
+    vi.stubGlobal('fetch', reply(JSON.stringify(two)));
+    expect(await briefToFilters('engineers excluding backend and frontend engineers')).toEqual(two);
   });
 
   it('puts back a role named right before "engineers" when the model dropped it', async () => {
@@ -198,10 +210,10 @@ describe('briefToFilters', () => {
 
   it('keeps every real exclusion, whatever the wording; only drops excluded roles that are not required anyway', async () => {
     vi.stubEnv('OPENAI_API_KEY', 'test-key');
-    // An invented "not every other engineering role" next to a required role: removed (changes nobody's result).
+    // Exclusions the model returns are never deleted (they are shown and editable); SQL applies them.
     const others = ['Data Engineer', 'DevOps Engineer', 'Frontend Engineer', 'Full Stack Engineer', 'Machine Learning Engineer', 'Mobile Engineer'];
     vi.stubGlobal('fetch', reply(JSON.stringify({ roles: ['Backend Engineer'], skills: ['React'], not_roles: others })));
-    expect(await briefToFilters('backend React engineers')).toEqual({ roles: ['Backend Engineer'], skills: ['React'] });
+    expect((await briefToFilters('backend React engineers')).not_roles).toEqual(others);
     // A real exclusion stays editable even when it doesn't change the first results.
     vi.stubGlobal('fetch', reply(JSON.stringify({ roles: ['Backend Engineer'], not_roles: ['Frontend Engineer'] })));
     expect(await briefToFilters('backend engineers who do not work as frontend engineers')).toEqual({ roles: ['Backend Engineer'], not_roles: ['Frontend Engineer'] });
@@ -217,6 +229,49 @@ describe('briefToFilters', () => {
       const got = await briefToFilters(brief);
       for (const key of Object.keys(model)) if (key !== 'roles') expect(got[key], brief).toEqual(model[key]);
     }
+  });
+
+  it('a contradiction never widens: a role required outside the exclusion stays, for every engineering role', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key');
+    const eng = ['Backend Engineer', 'Data Engineer', 'DevOps Engineer', 'Frontend Engineer', 'Full Stack Engineer', 'Machine Learning Engineer', 'Mobile Engineer'];
+    const word: Record<string, string> = { 'Backend Engineer': 'backend', 'Data Engineer': 'data', 'DevOps Engineer': 'devops', 'Frontend Engineer': 'frontend',
+      'Full Stack Engineer': 'full stack', 'Machine Learning Engineer': 'ML', 'Mobile Engineer': 'mobile' };
+    for (const role of eng) {
+      // Required and excluded (the brief says both): both kept, SQL finds nobody.
+      const both = { roles: [role], skills: ['Python'], not_roles: [role] };
+      vi.stubGlobal('fetch', reply(JSON.stringify(both)));
+      expect(await briefToFilters(`${word[role]} Python engineers excluding ${word[role]} engineers`), role).toEqual(both);
+      // Not a pure contradiction (every engineer + "not X"): X is never kept or narrowed to, whatever the wording.
+      vi.stubGlobal('fetch', reply(JSON.stringify({ roles: eng, skills: ['Python'], not_roles: [role] })));
+      expect((await briefToFilters(`${word[role]} Python engineers excluding ${word[role]} engineers`)).roles ?? [], role).not.toContain(role);
+      // Mentioned only inside the exclusion: not a requirement (the model's guessed role is dropped, the exclusion stays).
+      vi.stubGlobal('fetch', reply(JSON.stringify({ roles: [role], skills: ['React'], not_roles: [role] })));
+      expect(await briefToFilters(`React engineers other than ${word[role]} engineers`), role).toEqual({ skills: ['React'], not_roles: [role] });
+    }
+  });
+
+  it('an exclusion the phrase check misses still never becomes a requirement (3rd review)', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key');
+    const eng = ['Backend Engineer', 'Data Engineer', 'DevOps Engineer', 'Frontend Engineer', 'Full Stack Engineer', 'Machine Learning Engineer', 'Mobile Engineer'];
+    const cases: [string, string[]][] = [
+      ["Engineers who aren't backend engineers in Boston", ['Backend Engineer']],
+      ['Engineers excluding backend, frontend and mobile engineers in Boston', ['Backend Engineer', 'Frontend Engineer', 'Mobile Engineer']],
+      ['engineers, but no backend engineers, in Boston', ['Backend Engineer']],
+    ];
+    for (const [brief, excluded] of cases) {
+      const model = { roles: eng, not_roles: excluded, cities: ['Boston'] };
+      vi.stubGlobal('fetch', reply(JSON.stringify(model)));
+      expect(await briefToFilters(brief), brief).toEqual(model);
+    }
+  });
+
+  it('a shared skill requirement on both sides of "or" is one search', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key');
+    const model = { roles: ['Backend Engineer', 'DevOps Engineer'], skills: ['Go', 'Kubernetes'] };
+    vi.stubGlobal('fetch', reply(JSON.stringify(model)));
+    expect(await briefToFilters('Backend or DevOps engineers, each requiring Go and Kubernetes')).toEqual(model);
+    vi.stubGlobal('fetch', reply(JSON.stringify(model)));
+    expect(await briefToFilters('backend engineers with Go and Kubernetes or devops engineers with Go and Kubernetes')).toEqual(model);
   });
 
   it('accepts common nicknames for an excluded skill ("k8s", "JS", "golang"), but still drops look-alikes', async () => {

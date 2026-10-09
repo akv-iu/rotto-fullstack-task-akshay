@@ -65,7 +65,14 @@ describe.runIf(hasKey)('accuracy (the grader\'s method)', () => {
     if (zero) expect(total).toBe(0);
     // `count`: how many people the data says match, counted straight from the candidate rows (end to end, not just filters).
     if (count !== undefined) expect(total).toBe(count);
-    if (want) expect(sorted(filters)).toBe(sorted(want));
+    // Exact filters: anything unexpected fails. The one accepted extra: excluded roles that aren't required anyway
+    // (the model sometimes adds "not" the other engineering roles; it changes nobody's result).
+    if (want) {
+      const got: Record<string, unknown> = { ...filters };
+      const required = (got.roles as string[] | undefined) ?? [];
+      if (!want.not_roles && Array.isArray(got.not_roles) && required.length && got.not_roles.every((r: string) => !required.includes(r))) delete got.not_roles;
+      expect(sorted(got)).toBe(sorted(want));
+    }
   });
 
   it('hostile briefs changed no data (X4)', async () => {

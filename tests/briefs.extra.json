@@ -36,6 +36,8 @@
   {"brief": "recruiters in Denver or account executives in Denver", "count": 38},
   {"brief": "recruiters in Denver or account executives based in Denver", "count": 38},
   {"brief": "backend engineers in SF or frontend engineers in San Francisco", "count": 198},
+  {"brief": "Recruiters in California or account executives in California", "count": 147},
+  {"brief": "Backend or DevOps engineers, each requiring Go and Kubernetes", "count": 84},
   { "brief": "experienced marketing managers", "zero": true },
   { "brief": "account executives who have worked at Salesforce", "zero": true, "absent": ["companies", "current_companies"] },
   { "brief": "engineers who went to Harvard", "zero": true, "absent": ["schools"] },

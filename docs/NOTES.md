@@ -245,3 +245,19 @@ Both findings were clean-up rules overriding correct model output ("engineers la
 - The "or" guard compared wording ("in Denver" vs "based in Denver", "SF" vs "San Francisco") and flagged plain lists (0 instead of 38 / 198). It now uses what the model understood: two different searches leave 2+ values in another field (two cities); the same condition said twice leaves one.
 - Removing "redundant" excluded roles hid a real exclusion from the editable chips ("backend engineers who do not work as frontend engineers"). Now only the invented pattern is removed: "not" every other engineering role.
 - Proof: unit tests; live 7 briefs × 3 = 21/21 exact counts, and the real exclusion kept 3/3; full suite 189 passed; 10 samples exact.
+
+## 14. Targeted clean-up fix (2026-10-09, agreed with the reviewer)
+
+- Required and excluded roles are both kept; SQL decides (a contradiction finds nobody, never more; "backend or frontend, not backend" finds the frontend engineers). `dropExcludedRoles` and `dropRedundantRoleExclusions` removed, so every exclusion the model returns stays as an editable chip.
+- `flagLinkedOr` flags only when each side names a different value the model understood ("New York" vs "San Francisco"). A shared condition however phrased ("California" → two cities, "Go and Kubernetes" on both sides, "SF" / "San Francisco") is one search.
+- The measured role fixes stay (staff / React / DevOps / full stack).
+- Accuracy extras compare the keys a case names, so a harmless extra exclusion chip can't fail an unrelated case.
+- Proof: unit tests 46; live 14 briefs × 3 = 42/42 exact counts (incl. California 147, Go + Kubernetes 84); full suite 192 passed; 10 samples exact; search p95 1.76 s, paging p95 55 ms.
+
+## 15. Properties, not sentences (2026-10-09)
+
+- **Contradictions never widen:** a role counts as named only outside an exclusion phrase (`withoutExclusions`), so "backend Python engineers excluding backend engineers" keeps Backend + not Backend (nobody), while "React engineers other than frontend engineers" drops the guessed Frontend (68). One shared "role word + up to two words + engineers" check (`namedBeforeEngineers`) is used everywhere; the property test runs all 7 engineering roles × 3 shapes, and caught "data Python engineers".
+- **Accuracy extras compare filters exactly again.** The only accepted extra is excluded roles that aren't required (changes nobody's result).
+- **Known limit, kept on purpose:** the linked-"or" check matches value names. If both sides name the same city but different spellings of a shared skill ("Go and Kubernetes in Boston or golang and k8s in Boston"), it can flag a single search. Rare; documented rather than another parser rewrite before the deadline.
+- Proof (no API calls): unit 47/47, database + isolation + hostile 44 passed, TypeScript clean.
+- **Follow-up (same day):** the phrase check missed "aren't backend engineers" and comma lists, so an excluded role became the required one (188 → 0, 105 → 0). Safeguard with no phrase recognition: an excluded role is never kept, narrowed to or put back. Only when the model required nothing but roles it also excluded (a pure contradiction) does the wording decide, and an unrecognised wording then gives an empty result, never a wrong one. Proof: unit 48/48 (incl. "aren't", comma lists, "but no"), no API calls.
