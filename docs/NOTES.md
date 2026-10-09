@@ -220,3 +220,28 @@ Every number re-checked against the database first; all matched. Each fix has a 
 - The new prompt rules weakened the linked-"or" flag ("backend engineers in New York or product designers in San Francisco" merged in 1–3 of 3 runs). A worked example in the prompt plus `flagLinkedOr` in code: exactly one "or", the left side has its own condition, the right side starts a new role, 2+ roles. Plain lists ("PMs or designers in Chicago", "recruiters in Miami or Austin", "backend or frontend engineers in New York or Boston") are untouched (unit tests).
 
 **Final evidence:** full suite 177 passed (8 more run only without keys); 10 samples exact; live probe 36 briefs × 3 = 108/108 and 10 counted briefs × 3 = 30/30 in two clean rounds (a third was cut short by an OpenAI 502); samples give identical filters on 3 runs each; search p95 1.29 s, paging p95 72 ms; migrations apply cleanly to an empty database.
+
+## 11. Third external review (2026-10-09): clean-up rules must not undo correct model output
+
+| Finding | Checked | Fix | Proof |
+|---|---|---|---|
+| The "or" guard flagged plain lists with a shared condition: "I am interested in recruiters or account executives in Denver", "In Denver, find recruiters or AEs", "engineers in Boston who are backend or frontend engineers" → 0 (right: 38, 38, 108) | Reproduced with the model's correct output | `flagLinkedOr` now needs EACH side to have a role followed by its own condition ("backend engineers in NY" or "designers in SF") | Unit tests for 5 shared-condition shapes; live counts |
+| `narrowNamedRoles` read the role inside "other than backend engineers" as required → roles Backend + not Backend = 0 (right: 188) | Reproduced with a mocked valid model answer | A role named in an exclusion never counts as named; and `dropExcludedRoles` removes any required role that is also excluded (the exclusion always wins) | Unit tests; live count 188 |
+| "DevOps Python engineers": the model dropped the role and invented 5 skills (Docker, Kubernetes, Terraform…); `count: 0` passed anyway | Reproduced 2 of 3 runs | Prompt example ("DevOps engineers who know Rust"); `restoreNamedRoles` puts back a role named right before "engineers" (up to two words between); zero-count extras now also assert their filters | Live: 6/6 right after the fix |
+
+**Found along the way:**
+- With filter checks on the zero-count briefs, "backend React engineers" once came back with "not" every other engineering role. `dropUnaskedExclusions` keeps exclusion filters only when the brief has exclusion wording (not, n't, no, never, without, except, other than, non-…).
+- "data scientists in Boston or ML engineers" is ambiguous (it can mean both in Boston), so it's no longer flagged.
+- `restoreNamedRoles` doesn't run when the model understood nothing or flagged something, so an attack can't get a role back.
+
+**Final evidence:** full suite 183 passed (8 more without keys); 10 samples exact; live probe 38 briefs × 3 = 114/114 and 15 counted briefs × 3 = 45/45, three clean rounds; samples identical over 3 runs; search p95 1.6 s, paging p95 53 ms.
+
+## 12. Fourth review (2026-10-09): one principle instead of more patterns
+
+Both findings were clean-up rules overriding correct model output ("engineers lacking Java" lost its exclusion: 3,006 instead of 2,761; "recruiters in Denver or account executives in Denver" was flagged: 0 instead of 38). Rule adopted: **a clean-up step may only remove a filter when removing it can't change who is returned.** So the wording-based exclusion check is gone; only excluded roles that aren't required anyway are removed (no effect on results), and the "or" guard fires only when the two sides' conditions differ. Proof: unit tests; live 6 briefs × 3 = 18/18 exact counts; full suite 187 passed; 10 samples exact.
+
+## 13. Fifth review (2026-10-09): judge by meaning, not wording
+
+- The "or" guard compared wording ("in Denver" vs "based in Denver", "SF" vs "San Francisco") and flagged plain lists (0 instead of 38 / 198). It now uses what the model understood: two different searches leave 2+ values in another field (two cities); the same condition said twice leaves one.
+- Removing "redundant" excluded roles hid a real exclusion from the editable chips ("backend engineers who do not work as frontend engineers"). Now only the invented pattern is removed: "not" every other engineering role.
+- Proof: unit tests; live 7 briefs × 3 = 21/21 exact counts, and the real exclusion kept 3/3; full suite 189 passed; 10 samples exact.
