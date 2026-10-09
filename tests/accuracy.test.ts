@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { COMPANY, admin, api, resetCompany, signIn } from './helpers';
 
 const scores: { precision: number; recall: number; p20: number }[] = [];
-// The "baseline / best eval score" for SCORING.md and the README: the mean over every sample.
+// The "baseline / best eval score" for the README: the mean over every sample.
 afterAll(async () => {
   await resetCompany('acme'); // the eval switches acme to paid; don't leave it that way for manual testing
   if (!scores.length) return;

@@ -197,7 +197,7 @@ alter table public.subscriptions enable row level security;   -- no policies: in
 alter table public.billing_events enable row level security;  -- no policies: invisible to recruiters
 
 -- candidates: RLS on and no policy, and no grant below. Recruiters can't read or filter candidates directly,
--- otherwise a free company could skip its one-search limit by querying Supabase itself (SCORING §6).
+-- otherwise a free company could skip its one-search limit by querying Supabase itself.
 create policy companies_own on public.companies for select to authenticated
   using (id = (select public.current_company_id()));
 create policy recruiters_own on public.recruiters for select to authenticated

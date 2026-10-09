@@ -16,7 +16,7 @@ const t0 = (e: { headers: Record<string, string> }) => Number(/t=(\d+)/.exec(e.h
 async function plans() {
   const [a, g] = await Promise.all([signIn('acme'), signIn('globex')]);
   const [ab, gb] = [(await api(a, 'GET', '/api/plan')).body, (await api(g, 'GET', '/api/plan')).body];
-  // The whole body: paid must also mean searches_remaining null (SCORING §4).
+  // The whole body: paid must also mean searches_remaining null.
   for (const b of [ab, gb]) expect(b).toEqual(b.plan === 'paid' ? { plan: 'paid', searches_remaining: null } : { plan: 'free', searches_remaining: 1 });
   return { acme: ab.plan, globex: gb.plan };
 }

@@ -1,7 +1,7 @@
 # Specification: Functional and Non-Functional Requirements
 
 **Status:** APPROVED 2026-10-07. Any change from here on goes through this document first, and is logged in [NOTES.md](NOTES.md).
-Hard constraints from the brief live in [TECH_REQUIREMENTS.md](TECH_REQUIREMENTS.md) and are referenced by their IDs (T*, S*, R*, X*, B*, P*, D*).
+Hard constraints from the brief are referenced by short IDs (T*, S*, R*, X*, B*, P*, D*).
 
 ---
 
@@ -34,7 +34,7 @@ Hard constraints from the brief live in [TECH_REQUIREMENTS.md](TECH_REQUIREMENTS
   - `filters` plus `parent_search_id` (a correction, FR-4): the LLM is skipped and the parent's brief is used.
   - `saved_brief_id` (a re-run, FR-7.2): the LLM is skipped and the saved filters are used.
   
-  Extensions are listed in TECH_REQUIREMENTS §3a. This is how filter corrections work (FR-4).
+  Extensions are additive only. This is how filter corrections work (FR-4).
 
 ### FR-3 Paging
 - FR-3.1 `GET /api/search/{id}?page=N` returns 20 results per page, 1-based.

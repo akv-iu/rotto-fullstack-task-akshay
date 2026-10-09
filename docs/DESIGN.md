@@ -78,13 +78,13 @@ Sources: [Juicebox search docs](https://docs.juicebox.ai/search) · [Juicebox Pe
 
 Warm graphite neutrals, **one purple accent** used **only** for actions and highlights, and the typeface **Montserrat**. **Light and dark**, following the device setting.
 
-> **Changed 2026-10-08 (user):** the accent and font now match rotto.com: purple instead of burnt orange, Montserrat instead of Instrument Sans, plus a soft glow drifting behind the search box (still for reduced-motion users). The purple is a little deeper than rotto.com's `#6c5ce7`, which measures 4.49:1 as small text, just under the 4.5:1 minimum; `#5b4bdb` measures 5.2–6.0:1 in light mode and 6.9–8.2:1 in dark. The original orange screenshots in `docs/design/` show the earlier accent; layout and states are unchanged.
+> **Changed 2026-10-08:** the accent and font now match rotto.com: purple instead of burnt orange, Montserrat instead of Instrument Sans, plus a soft glow drifting behind the search box (still for reduced-motion users). The purple is a little deeper than rotto.com's `#6c5ce7`, which measures 4.49:1 as small text, just under the 4.5:1 minimum; `#5b4bdb` measures 5.2–6.0:1 in light mode and 6.9–8.2:1 in dark. The original orange screenshots in `docs/design/` show the earlier accent; layout and states are unchanged.
 >
-> **Also 2026-10-08 (user): the search page is a landing page before the first search,** like rotto.com: a large centred headline ("Find the right people, in plain English."), one line of explanation, a large centred search box with the glow, and the examples centred below. After a search it becomes the working layout (search bar on top, chips, results); state 1 (first visit) keeps its rule that examples fill the box but never run it.
+> **Also 2026-10-08: the search page is a landing page before the first search,** like rotto.com: a large centred headline ("Find the right people, in plain English."), one line of explanation, a large centred search box with the glow, and the examples centred below. After a search it becomes the working layout (search bar on top, chips, results); state 1 (first visit) keeps its rule that examples fill the box but never run it.
 >
-> **Also 2026-10-08 (user): a light/dark toggle** (sun/moon) in the top bar and on the sign-in page. Until pressed, the app follows the device setting; the choice is remembered in this browser and applied before the first paint (no flash).
+> **Also 2026-10-08: a light/dark toggle** (sun/moon) in the top bar and on the sign-in page. Until pressed, the app follows the device setting; the choice is remembered in this browser and applied before the first paint (no flash).
 >
-> **Also 2026-10-08 (user): the landing backdrop is modelled on rotto.com's hero** (inspected in the browser): a faint dot grid, two soft grey rings that swell and tilt like their WebGL bands (ours is CSS only), a breathing halo in the centre (their own CSS technique), and the search box typing out our example briefs. Landing view only; everything is still for reduced-motion users.
+> **Also 2026-10-08: the landing backdrop is modelled on rotto.com's hero** (inspected in the browser): a faint dot grid, two soft grey rings that swell and tilt like their WebGL bands (ours is CSS only), a breathing halo in the centre (their own CSS technique), and the search box typing out our example briefs. Landing view only; everything is still for reduced-motion users.
 
 ![Look options considered (C, Graphite & Signal, chosen)](design/03-look-options.png)
 

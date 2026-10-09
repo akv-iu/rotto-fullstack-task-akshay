@@ -10,7 +10,7 @@ const VARIANTS = {
   accent: 'border border-accent bg-surface text-accent hover:bg-accent-soft', // Upgrade: one variant, not overrides (they lost to secondary's colours)
 } as const;
 
-// 44 px tall on phones (SCORING: tap targets >= 44 px), 36 px from md up.
+// 44 px tall on phones (tap targets >= 44 px), 36 px from md up.
 export const buttonClass = (variant: keyof typeof VARIANTS = 'secondary', className?: string) => cx(
   'inline-flex min-h-11 md:min-h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm font-medium transition active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50',
   VARIANTS[variant],
