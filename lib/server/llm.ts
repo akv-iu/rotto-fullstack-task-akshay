@@ -54,6 +54,7 @@ export async function briefToFilters(brief: string): Promise<Record<string, unkn
   restoreNamedRoles(out, brief);
   narrowNamedRoles(out, brief);
   flagLinkedOr(out, brief);
+  flagContradiction(out, brief);
   addEngineerRoles(out, brief);
   dropUnnamed(out, brief, ['companies', 'all_companies', 'current_companies', 'not_companies'], 'a company not in our data');
   dropUnnamed(out, brief, ['not_skills'], 'a skill not in our data');
@@ -84,9 +85,13 @@ const ROLE_NAMES: Record<string, string[]> = {
   'Mobile Engineer': ['mobile'], 'Machine Learning Engineer': ['machine learning', 'ml'],
   'Data Engineer': ['data engineer', 'data engineers', 'data engineering'],
 };
-/** The brief without its exclusion phrases ("excluding backend engineers", "other than frontend engineers"). */
-const withoutExclusions = (text: string) =>
-  text.replace(/\b(other than|excluding|except( for)?|not|but not|besides|apart from|aside from)\s+([\w.#+/-]+\s+){0,3}?(engineers?|developers?|devs?)\b/g, ' ');
+/**
+ * The brief without its exclusion phrases ("excluding backend engineers", "other than frontend engineers", "who aren't
+ * backend engineers", "excluding backend, frontend and mobile engineers"). If a wording is missed, a role can look
+ * required; the contradiction check below then returns nobody: empty, never wrong.
+ */
+const withoutExclusions = (text: string) => text.replace(
+  /\b(other than|excluding|except( for)?|not|no|but not|besides|apart from|aside from|\w+n['’]t)\s+([\w.#+/-]+,?\s+((and|or)\s+)?){0,6}?(engineers?|developers?|devs?)\b/g, ' ');
 
 /**
  * The role word right before "engineers"/"developers"/"devs", with at most two words between: "data Python engineers",
@@ -191,6 +196,27 @@ function flagLinkedOr(out: Record<string, unknown>, brief: string) {
   if (parts.every(ownCondition) && differs) out.unsupported = [{ text: 'two different searches joined by "or"', reason: 'unsupported' }];
 }
 
+
+/**
+ * "backend Python engineers excluding backend engineers" asks for and excludes the same role. The model may answer with
+ * that role, with no role, or with every engineer; any of those must find nobody, never a wider search. So when the
+ * brief requires only roles it also excludes, flag it (an amber chip, nobody returned).
+ */
+function flagContradiction(out: Record<string, unknown>, brief: string) {
+  if (!Array.isArray(out.not_roles) || !out.not_roles.length) return;
+  const excluded = out.not_roles;
+  const plain = withoutExclusions(brief.toLowerCase().replace(/-/g, ' '));
+  const required = (r: string) => namedBeforeEngineers(r, plain) || (ROLE_NAMES[r] ?? []).some((n) => n.includes('engineer') && hasWord(plain, n));
+  const both = ENGINEERING_ROLES.filter((r) => excluded.includes(r) && required(r));
+  if (!both.length) return;
+  // "backend or frontend engineers, excluding backend" names an alternative: not a contradiction, the rest stands.
+  // The model's widening answer is every engineer, never another kind of role, so a non-engineering role counts too.
+  const roles = Array.isArray(out.roles) ? out.roles : [];
+  if (ENGINEERING_ROLES.some((r) => !excluded.includes(r) && required(r))
+    || roles.some((r) => !ENGINEERING_ROLES.includes(r) && !excluded.includes(r))) return;
+  const flagged = Array.isArray(out.unsupported) ? out.unsupported : [];
+  out.unsupported = [...flagged, { text: `asks for and excludes ${both.join(', ')}`, reason: 'unclear' }];
+}
 
 function addEngineerRoles(out: Record<string, unknown>, brief: string) {
   if (!/\bengineers?\b/i.test(brief) || out.roles || out.not_roles || out.skills || out.any_skills) return; // "not engineers" excludes them

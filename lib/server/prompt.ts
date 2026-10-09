@@ -19,8 +19,9 @@ const properties = {
   degrees: enumList(VOCAB.degrees),
   fields: enumList(VOCAB.fields),
   schools: enumList(VOCAB.schools),
-  min_years: { type: ['integer', 'null'] },
-  max_years: { type: ['integer', 'null'] },
+  // Numbers, not integers: "at least 2.5 years" is a real bound; cleanFilters rounds it the safe way (min up, max down).
+  min_years: { type: ['number', 'null'] },
+  max_years: { type: ['number', 'null'] },
   // A choice, not a boolean: "not open" must be a deliberate answer, never a default false.
   open_to_work: { type: ['string', 'null'], enum: ['open', 'not_open', null] },
   worked_at_company_type: companyType,
@@ -56,7 +57,7 @@ Rules:
 - skills: the candidate must have ALL of them ("knows Go and Kubernetes"). any_skills: the candidate needs AT LEAST ONE ("React or Vue").
 - Skill phrases map to skills (e.g. "enterprise sales experience" -> skills ["Enterprise Sales"]).
 - seniorities: only junior / mid / senior / staff, only when stated. "senior or above" -> ["senior","staff"].
-- Years: "5+ years" / "at least 5" -> min_years 5; "more than 5 years" -> min_years 6; "under 3 years" -> max_years 2.
+- Years: "5+ years" / "at least 5" -> min_years 5; "at least 2.5 years" -> min_years 2.5 (keep fractions as given); "more than 5 years" -> min_years 6; "under 3 years" -> max_years 2.
 - cities (all candidates are in the US): ${citiesWithStates}. A state maps to its listed cities ("Texas" -> ["Austin"], "California" -> ["Los Angeles","San Francisco"]).
 - Companies: "worked at X or Y" -> companies [X,Y] (any of them); "worked at both X and Y" / "worked at X and Y" -> all_companies [X,Y] (every one of them); "currently at X" -> current_companies.
 - "worked at / experience at a startup" -> worked_at_company_type "startup" (any past job). "currently at a startup" -> current_company_type "startup".

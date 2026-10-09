@@ -1,6 +1,6 @@
 # Rotto: plain-English candidate search
 
-**Run** (Docker Desktop running, Node 24): `export OPENAI_API_KEY=… STRIPE_WEBHOOK_SECRET=…`, then `make setup && make dev` → http://localhost:3000. Sign in as `recruiter@acme.test` or `recruiter@globex.test` / `rotto-assessment`. `make test` runs 200 tests (8 more cover running without keys).
+**Run** (Docker Desktop running, Node 24): `export OPENAI_API_KEY=… STRIPE_WEBHOOK_SECRET=…`, then `make setup && make dev` → http://localhost:3000. Sign in as `recruiter@acme.test` or `recruiter@globex.test` / `rotto-assessment`. `make test` runs 204 tests (8 more cover running without keys).
 
 **How search works.** One LLM call turns the brief into filter JSON; no candidate data is sent. One fixed, parameterized SQL function returns exact matches, 20 per page: open to work first, then most experienced, then ID; paging never uses a search (p95 44–150 ms). Editing a chip re-runs without the LLM or a search. The samples are exact filter matches, so precision comes from correct filters: all 10 return exactly the right people.
 

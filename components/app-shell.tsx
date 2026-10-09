@@ -69,7 +69,7 @@ export function TopBar() {
   const pathname = usePathname();
   return (
     <header className="sticky top-0 z-20 border-b border-line bg-surface">
-      <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-6 px-4 md:px-6">
+      <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-3 px-4 md:gap-6 md:px-6">
         <Link href="/?new" className="text-base font-semibold tracking-tight">Rotto</Link>
         <nav aria-label="Main" className="hidden gap-5 text-sm md:flex">
           {LINKS.map(({ href, label }) => (
@@ -94,7 +94,7 @@ function PlanStatus() {
   const n = plan.searches_remaining ?? 0;
   return (
     <div className="flex items-center gap-2 text-sm">
-      <span className="whitespace-nowrap text-muted"><span className="hidden sm:inline">Free plan · </span>{n} {n === 1 ? 'search' : 'searches'} left</span>
+      <span className="whitespace-nowrap text-muted"><span className="hidden sm:inline">Free plan · </span>{n} <span className="hidden sm:inline">{n === 1 ? 'search' : 'searches'} </span>left</span>
       <Button variant="accent" onClick={openUpgrade}>Upgrade</Button>
     </div>
   );

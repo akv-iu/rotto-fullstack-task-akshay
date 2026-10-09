@@ -18,19 +18,24 @@ export function ShortlistButton({ candidateId, name, compact, block }: { candida
   const [newName, setNewName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stale, setStale] = useState(false); // the lists couldn't be re-read: the ticks may be out of date
   const m = membership(lists ?? [], candidateId);
   const on = m.names.length > 0;
 
   async function act(fn: () => Promise<unknown>) {
     setBusy(true); setError(null);
-    try { await fn(); await refreshLists(); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+    try { await fn(); } catch (e) { setError((e as Error).message); }
+    // Always re-read the lists, also after a failure: a list created before the failure then shows up, ready to tap.
+    await refresh();
+    setBusy(false);
   }
+  const refresh = () => refreshLists().then(() => setStale(false), () => setStale(true));
   const toggle = (listId: string, member: boolean) =>
     act(() => api(`/api/shortlists/${listId}/people/${candidateId}`, { method: member ? 'DELETE' : 'POST' }));
   const createAndAdd = () => act(async () => {
     const { id } = await api<{ id: string }>('/api/shortlists', { method: 'POST', body: { name: newName } });
+    setNewName(''); // the list exists now: if adding fails, "try again" is a tap on it above, not a second create
     await api(`/api/shortlists/${id}/people/${candidateId}`, { method: 'POST' });
-    setNewName('');
   });
 
   const label = on ? `${name} is on ${m.names.join(', ')}. Change lists` : `Shortlist ${name}`;
@@ -72,6 +77,12 @@ export function ShortlistButton({ candidateId, name, compact, block }: { candida
               <Button type="submit" disabled={busy || !newName.trim()}>Add</Button>
             </form>
             {error && <p role="alert" className="px-2 pt-2 text-sm text-danger">{error}</p>}
+            {stale && (
+              <p role="alert" className="px-2 pt-2 text-sm text-danger">
+                Couldn&apos;t refresh your lists, so these ticks may be out of date.{' '}
+                <button type="button" onClick={refresh} className="font-medium underline">Try again</button>
+              </p>
+            )}
           </Popover.Content>
         </Popover.Portal>
       </Popover.Root>

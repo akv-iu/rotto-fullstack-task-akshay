@@ -48,12 +48,11 @@ function ChipView({ chip, filters, onChange, disabled }: { chip: Chip } & Props)
     );
   }
   const name = `${chip.label} ${chip.text}`.trim();
-  const editable = !(chip.kind === 'scalar' && chip.key === 'open_to_work');
   return (
     <span className={cx(CHIP, 'border-border bg-surface pl-3', open && 'border-accent ring-2 ring-accent/20')}>
       <Popover.Root open={open} onOpenChange={setOpen}>
-        <Popover.Trigger asChild disabled={disabled || !editable}>
-          <button type="button" className="min-h-11 py-1 md:min-h-0" aria-label={editable ? `Change ${name}` : name}>
+        <Popover.Trigger asChild disabled={disabled}>
+          <button type="button" className="min-h-11 py-1 md:min-h-0" aria-label={`Change ${name}`}>
             {chip.label && <span className="text-muted">{chip.label} </span>}{chip.text}
           </button>
         </Popover.Trigger>
@@ -66,6 +65,8 @@ function ChipView({ chip, filters, onChange, disabled }: { chip: Chip } & Props)
                 onPick={(v) => { setOpen(false); onChange(replaceValue(filters, chip.key, chip.value, v)); }} />
             ) : chip.key === 'min_years' || chip.key === 'max_years' ? (
               <YearsPicker initial={filters[chip.key] ?? 0} onPick={(n) => { setOpen(false); onChange(setScalar(filters, chip.key as 'min_years', n)); }} />
+            ) : chip.key === 'open_to_work' ? (
+              <OpenToWorkPicker onPick={(v) => { setOpen(false); onChange(setScalar(filters, 'open_to_work', v)); }} />
             ) : (
               <CompanyTypePicker onPick={(t) => { setOpen(false); onChange(setScalar(filters, chip.key as 'worked_at_company_type', t)); }} />
             )}
@@ -110,6 +111,16 @@ function YearsPicker({ initial, onPick }: { initial: number; onPick: (n: number)
       </label>
       <Button type="submit" variant="primary">Apply</Button>
     </form>
+  );
+}
+
+function OpenToWorkPicker({ onPick }: { onPick: (open: boolean) => void }) {
+  return (
+    <div className="grid gap-1">
+      {([[true, 'Open to work'], [false, 'Not open to work']] as const).map(([v, label]) => (
+        <button key={label} type="button" onClick={() => onPick(v)} className="rounded-md px-2.5 py-1.5 text-left text-sm hover:bg-bg">{label}</button>
+      ))}
+    </div>
   );
 }
 

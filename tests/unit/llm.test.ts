@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LlmError, MODEL, briefToFilters, llmConfigured } from '@/lib/server/llm';
+import { cleanFilters } from '@/lib/shared/filters';
 
 const reply = (content: string) =>
   vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 }));
@@ -181,10 +182,14 @@ describe('briefToFilters', () => {
     expect(await briefToFilters('React engineers other than frontend engineers')).toEqual({ skills: ['React'], not_roles: ['Frontend Engineer'] });
     // Required and excluded are both kept and SQL decides: a contradiction finds nobody (never everyone), and
     // "backend or frontend, but not backend" finds the frontend engineers.
-    for (const m of [{ roles: ['Backend Engineer'], not_roles: ['Backend Engineer'] }, { roles: ['Backend Engineer', 'Frontend Engineer'], not_roles: ['Backend Engineer'] }]) {
-      vi.stubGlobal('fetch', reply(JSON.stringify(m)));
-      expect(await briefToFilters('backend engineers, excluding backend engineers')).toEqual(m);
-    }
+    const contradiction = { roles: ['Backend Engineer'], not_roles: ['Backend Engineer'] };
+    vi.stubGlobal('fetch', reply(JSON.stringify(contradiction)));
+    const got = await briefToFilters('backend engineers, excluding backend engineers');
+    expect(got).toMatchObject(contradiction);
+    expect(cleanFilters(got)!.runnable).toBe(false); // flagged: nobody, never everyone
+    const plain = { roles: ['Backend Engineer', 'Frontend Engineer'], not_roles: ['Backend Engineer'] };
+    vi.stubGlobal('fetch', reply(JSON.stringify(plain)));
+    expect(await briefToFilters('engineers excluding backend engineers')).toEqual(plain); // SQL: the frontend engineers
     // Every exclusion chip stays, however many.
     const two = { roles: eng, not_roles: ['Backend Engineer', 'Frontend Engineer'] };
     vi.stubGlobal('fetch', reply(JSON.stringify(two)));
@@ -240,7 +245,9 @@ describe('briefToFilters', () => {
       // Required and excluded (the brief says both): both kept, SQL finds nobody.
       const both = { roles: [role], skills: ['Python'], not_roles: [role] };
       vi.stubGlobal('fetch', reply(JSON.stringify(both)));
-      expect(await briefToFilters(`${word[role]} Python engineers excluding ${word[role]} engineers`), role).toEqual(both);
+      const got = await briefToFilters(`${word[role]} Python engineers excluding ${word[role]} engineers`);
+      expect(got, role).toMatchObject(both);
+      expect(cleanFilters(got)!.runnable, role).toBe(false);
       // Not a pure contradiction (every engineer + "not X"): X is never kept or narrowed to, whatever the wording.
       vi.stubGlobal('fetch', reply(JSON.stringify({ roles: eng, skills: ['Python'], not_roles: [role] })));
       expect((await briefToFilters(`${word[role]} Python engineers excluding ${word[role]} engineers`)).roles ?? [], role).not.toContain(role);
@@ -248,6 +255,59 @@ describe('briefToFilters', () => {
       vi.stubGlobal('fetch', reply(JSON.stringify({ roles: [role], skills: ['React'], not_roles: [role] })));
       expect(await briefToFilters(`React engineers other than ${word[role]} engineers`), role).toEqual({ skills: ['React'], not_roles: [role] });
     }
+  });
+
+  it('a brief that requires and excludes the same role finds nobody, whatever roles the model returned (7th review)', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key');
+    const eng = ['Backend Engineer', 'Data Engineer', 'DevOps Engineer', 'Frontend Engineer', 'Full Stack Engineer', 'Machine Learning Engineer', 'Mobile Engineer'];
+    const word: Record<string, string> = { 'Backend Engineer': 'backend', 'Data Engineer': 'data', 'DevOps Engineer': 'devops', 'Frontend Engineer': 'frontend',
+      'Full Stack Engineer': 'full stack', 'Machine Learning Engineer': 'ML', 'Mobile Engineer': 'mobile' };
+    for (const role of eng) {
+      const brief = `${word[role]} Python engineers excluding ${word[role]} engineers`;
+      for (const roles of [[role], undefined, eng]) { // the three answers seen: the role, no role, every engineer
+        vi.stubGlobal('fetch', reply(JSON.stringify({ ...(roles ? { roles } : {}), skills: ['Python'], not_roles: [role] })));
+        expect(cleanFilters(await briefToFilters(brief))!.runnable, `${brief} / ${roles?.length ?? 0} roles`).toBe(false);
+      }
+    }
+    // Ordinary exclusions are not contradictions.
+    const ordinary: [string, Record<string, unknown>][] = [
+      ["Engineers who aren't backend engineers in Boston", { roles: eng, not_roles: ['Backend Engineer'], cities: ['Boston'] }],
+      ['Engineers excluding backend, frontend and mobile engineers in Boston', { roles: eng, not_roles: ['Backend Engineer', 'Frontend Engineer', 'Mobile Engineer'], cities: ['Boston'] }],
+      ['engineers other than backend engineers in Boston', { roles: eng, not_roles: ['Backend Engineer'], cities: ['Boston'] }],
+      ['senior React engineers other than frontend engineers', { skills: ['React'], seniorities: ['senior'], not_roles: ['Frontend Engineer'] }],
+      ['Python developers who are not data engineers', { skills: ['Python'], not_roles: ['Data Engineer'] }],
+      ['people in Boston who are not engineers', { cities: ['Boston'], not_roles: eng }],
+    ];
+    for (const [brief, model] of ordinary) {
+      vi.stubGlobal('fetch', reply(JSON.stringify(model)));
+      expect(cleanFilters(await briefToFilters(brief))!.runnable, brief).toBe(true);
+    }
+  });
+
+  it('"A or B, excluding A" keeps B: an alternative is not a contradiction (8th review)', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key');
+    const eng = ['Backend Engineer', 'Data Engineer', 'DevOps Engineer', 'Frontend Engineer', 'Full Stack Engineer', 'Machine Learning Engineer', 'Mobile Engineer'];
+    const word: Record<string, string> = { 'Backend Engineer': 'backend', 'Data Engineer': 'data', 'DevOps Engineer': 'devops', 'Frontend Engineer': 'frontend',
+      'Full Stack Engineer': 'full stack', 'Machine Learning Engineer': 'ML', 'Mobile Engineer': 'mobile' };
+    const cases: [string, string, string][] = [ // [brief, excluded, kept]
+      ['backend or frontend engineers, excluding backend engineers', 'Backend Engineer', 'Frontend Engineer'],
+      ['backend engineers or frontend engineers, but not backend engineers', 'Backend Engineer', 'Frontend Engineer'],
+    ];
+    for (const a of eng) for (const b of eng) if (a !== b && a !== 'Data Engineer' && b !== 'Data Engineer') // "data or X engineers" doesn't name Data
+      cases.push([`${word[a]} or ${word[b]} engineers, excluding ${word[a]} engineers`, a, b]);
+    for (const [brief, excluded, kept] of cases) {
+      for (const roles of [[kept], [excluded, kept]]) { // the model's answers: just the alternative, or both
+        const model = { roles, not_roles: [excluded] };
+        vi.stubGlobal('fetch', reply(JSON.stringify(model)));
+        const got = await briefToFilters(brief);
+        expect(got, brief).toEqual(model);
+        expect(cleanFilters(got)!.runnable, brief).toBe(true);
+      }
+    }
+    // A non-engineering alternative the model returned also stands.
+    const model = { roles: ['Recruiter'], not_roles: ['Backend Engineer'] };
+    vi.stubGlobal('fetch', reply(JSON.stringify(model)));
+    expect(cleanFilters(await briefToFilters('recruiters or backend engineers, excluding backend engineers'))!.runnable).toBe(true);
   });
 
   it('an exclusion the phrase check misses still never becomes a requirement (3rd review)', async () => {
@@ -288,6 +348,16 @@ describe('briefToFilters', () => {
     expect(await briefToFilters('Backend or DevOps engineers, each requiring Go and Kubernetes')).toEqual(model);
     vi.stubGlobal('fetch', reply(JSON.stringify(model)));
     expect(await briefToFilters('backend engineers with Go and Kubernetes or devops engineers with Go and Kubernetes')).toEqual(model);
+  });
+
+  it('the model can return fractional years ("at least 2.5 years"), and they are rounded the safe way', async () => {
+    const { RESPONSE_SCHEMA } = await import('@/lib/server/prompt');
+    const props = RESPONSE_SCHEMA.properties as unknown as Record<string, { type: string[] }>;
+    expect(props.min_years.type).toContain('number');
+    expect(props.max_years.type).toContain('number');
+    vi.stubEnv('OPENAI_API_KEY', 'test-key');
+    vi.stubGlobal('fetch', reply(JSON.stringify({ roles: ['Recruiter'], min_years: 2.5, max_years: 7.5 })));
+    expect(cleanFilters(await briefToFilters('recruiters with 2.5 to 7.5 years'))!.filters).toEqual({ roles: ['Recruiter'], min_years: 3, max_years: 7 });
   });
 
   it('accepts common nicknames for an excluded skill ("k8s", "JS", "golang"), but still drops look-alikes', async () => {

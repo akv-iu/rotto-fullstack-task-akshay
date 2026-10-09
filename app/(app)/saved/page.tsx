@@ -21,14 +21,14 @@ export default function SavedPage() {
   const [deleting, setDeleting] = useState<Saved | null>(null);
   const out = plan?.plan === 'free' && plan.searches_remaining === 0;
 
-  const load = () => api<Saved[]>('/api/saved-briefs').then(setSaved).catch((e) => setError(e.message));
+  const load = () => api<Saved[]>('/api/saved-briefs').then((s) => { setError(null); setSaved(s); }).catch((e) => setError(e.message));
   useEffect(() => { load(); }, []);
 
   return (
     <section className="px-4 py-5 md:px-6">
       <h1 className="text-xl font-semibold tracking-tight">Saved searches</h1>
       <p className="mt-1 text-sm text-muted">Running a saved search uses a search on the free plan.</p>
-      {error && <ErrorBar message={error} />}
+      {error && <ErrorBar message={error} onRetry={load} />}
       {saved === null && !error && <div className="mt-6 space-y-2"><Skeleton className="h-16 w-full" /><Skeleton className="h-16 w-full" /></div>}
       {saved?.length === 0 && (
         <EmptyState title="No saved searches yet." body="Run a search, then press Save search next to the results.">

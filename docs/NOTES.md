@@ -277,3 +277,21 @@ All fixed with tests that failed first; no paid API calls (fake model replies, f
 | 7 | A recruiter could refund their own in-flight search and reserve another | `refund_search(search, company)` is server-only | `db.test.ts`: recruiter call refused, other company's search not refunded |
 
 Known limit kept (documented in §15): the linked-"or" check matches value names, so differently spelled shared skills can be flagged.
+
+## 17. Seventh review (2026-10-09, commit 87aa69b)
+
+| # | Finding | Fix | Proof (no paid calls) |
+|---|---|---|---|
+| 1 | "backend Python engineers excluding backend engineers" returned 805 when the model gave no role or every engineer (live, 3 of 3) | `flagContradiction`: a role required outside the exclusions and also excluded gets an amber "asks for and excludes" chip, so nobody is returned whatever roles the model sent; `withoutExclusions` also covers "aren't …" and comma lists | Unit: 7 roles × 3 model answers all non-runnable; 6 ordinary exclusions stay runnable |
+| 2 | Shortlist: create ok + add failed → retry re-created the list (duplicate name) | The name box clears once the list exists, and lists are re-read even after a failure, so the new list is in the menu to tap | Chrome with a faked failure: fails on the old code, passes now (1 list, 1 member) |
+| 3 | "at least 2.5 years" → 0 (schema allowed only whole years) | Schema takes numbers; prompt says keep fractions; `cleanFilters` rounds min up, max down | Unit test on the schema and the rounding (206 recruiters with 3+ years) |
+| 4 | "Open to work" chip couldn't be switched to "Not open to work" | The chip opens a two-choice picker | Chrome: fails on the old code, passes now |
+| 5 | Saved searches and shortlist pages had no Try again after a failed load | Retry wired to their load; a later success clears the error | Chrome: fails on the old code, passes now |
+| 6 | Shared-alias "or" limit seen live (40 → 0) | Deferred, as documented in §15 | — |
+| 7 | Shortlists over 1,000 people are cut at 1,000 (API row limit) | Deferred: far beyond the assessment's use; noted as a known limit | — |
+
+## 18. Eighth review (2026-10-09)
+
+1. **"A or B, excluding A" returned nobody.** The contradiction flag fired whenever an excluded role was named outside the exclusion, so "backend or frontend engineers, excluding backend engineers" found 0 instead of the 593 frontend engineers. It now fires only when every role the brief asks for is excluded (a named engineering alternative, or a non-engineering role the model returned, means the search stands). Tested for every pair of engineering roles and both wordings; "backend Python engineers excluding backend engineers" still finds nobody.
+2. **A failed list refresh left stale ticks.** The shortlist menu now says the lists couldn't be refreshed and offers Try again.
+3. **The free-plan header overflowed 320–375 px phones.** Smaller gap on phones and "3 left" instead of "3 searches left" below `sm`. Checked at 320 and 375 px: no horizontal scroll.

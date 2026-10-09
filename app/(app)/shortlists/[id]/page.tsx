@@ -17,7 +17,7 @@ export default function ShortlistPage({ params }: { params: Promise<{ id: string
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
 
-  const load = useCallback(() => api<{ id: string; name: string; people: CandidateCard[] }>(`/api/shortlists/${id}`).then(setList).catch((e) => setError(e.message)), [id]);
+  const load = useCallback(() => api<{ id: string; name: string; people: CandidateCard[] }>(`/api/shortlists/${id}`).then((l) => { setError(null); setList(l); }).catch((e) => setError(e.message)), [id]);
   useEffect(() => { load(); }, [load]);
 
   async function remove(personId: string) {
@@ -30,7 +30,7 @@ export default function ShortlistPage({ params }: { params: Promise<{ id: string
       <section className="min-w-0 flex-1 px-4 py-5 md:px-6">
         <Link href="/shortlists" className="text-sm text-muted hover:text-ink">Shortlists</Link>
         <h1 className="mt-1 text-xl font-semibold tracking-tight">{list?.name ?? ' '}</h1>
-        {error && <ErrorBar message={error} />}
+        {error && <ErrorBar message={error} onRetry={load} />}
         {!list && !error && <RowSkeletons rows={4} />}
         {list?.people.length === 0 && (
           <EmptyState title="Nobody on this list yet." body="Shortlist people from search results.">
