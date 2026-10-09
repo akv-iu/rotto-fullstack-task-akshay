@@ -7,6 +7,13 @@ const f = {
 };
 
 describe('chip model', () => {
+  it('shows exclusions as their own chips', () => {
+    const chips = chipsOf({ roles: ['Recruiter'], not_skills: ['Java'], not_companies: ['Saltbox'], never_company_type: 'startup' });
+    expect(chips.map((c) => (c.kind === 'unsupported' ? '' : `${c.label}:${c.text}`))).toEqual([
+      'Role:Recruiter', "Doesn't know:Java", 'Never worked at:Saltbox', 'Never worked at a:startup',
+    ]);
+  });
+
   it('makes one chip per value, plus scalar and unsupported chips', () => {
     expect(chipsOf(f).map((c) => (c.kind === 'unsupported' ? `!${c.text}` : `${c.label}:${c.text}`))).toEqual([
       'Seniority:Senior', 'City:New York', 'Skill:React', 'Skill:AWS', 'Worked at a:startup', '!speaks Japanese',

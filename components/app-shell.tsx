@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { api } from '@/lib/client/api';
 import { supabase } from '@/lib/client/supabase';
+import { ErrorBar } from './search/states';
 import { ThemeToggle } from './ThemeToggle';
 import { Button, Skeleton, cx } from './ui';
 
@@ -18,6 +19,8 @@ type AppState = {
   lists: ShortlistSummary[] | null;
   refreshLists: () => Promise<void>;
   openUpgrade: () => void;
+  loadFailed: boolean;
+  retryLoad: () => void;
 };
 const AppStateContext = createContext<AppState | null>(null);
 export const useAppState = () => useContext(AppStateContext)!;
@@ -28,14 +31,29 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const refreshPlan = useCallback(async () => setPlan(await api<Plan>('/api/plan')), []);
   const refreshLists = useCallback(async () => setLists(await api<ShortlistSummary[]>('/api/shortlists')), []);
-  useEffect(() => {
-    refreshPlan().catch(() => {});
-    refreshLists().catch(() => {});
+  // Without the plan and the shortlists the app can only show skeletons, so a failed first load says so and offers a retry.
+  const [loadFailed, setLoadFailed] = useState(false);
+  const retryLoad = useCallback(() => {
+    setLoadFailed(false);
+    Promise.all([refreshPlan(), refreshLists()]).catch(() => setLoadFailed(true));
   }, [refreshPlan, refreshLists]);
+  useEffect(retryLoad, [retryLoad]);
+
+  // An upgrade lands through the billing webhook, not through this page: re-read the plan when the recruiter comes back
+  // to the tab, and every 15 s while a free company is out of searches, so the search box unlocks without a reload.
+  const waitingForUpgrade = plan?.plan === 'free' && plan.searches_remaining === 0;
+  useEffect(() => {
+    const check = () => { refreshPlan().catch(() => {}); };
+    window.addEventListener('focus', check);
+    const timer = waitingForUpgrade ? setInterval(check, 15_000) : undefined;
+    return () => { window.removeEventListener('focus', check); clearInterval(timer); };
+  }, [refreshPlan, waitingForUpgrade]);
+
+  const closeUpgrade = (open: boolean) => { setUpgradeOpen(open); if (!open) refreshPlan().catch(() => {}); };
   return (
-    <AppStateContext.Provider value={{ plan, refreshPlan, lists, refreshLists, openUpgrade: () => setUpgradeOpen(true) }}>
+    <AppStateContext.Provider value={{ plan, refreshPlan, lists, refreshLists, openUpgrade: () => setUpgradeOpen(true), loadFailed, retryLoad }}>
       {children}
-      <UpgradeDialog open={upgradeOpen} onOpenChange={setUpgradeOpen} />
+      <UpgradeDialog open={upgradeOpen} onOpenChange={closeUpgrade} />
     </AppStateContext.Provider>
   );
 }
@@ -95,6 +113,12 @@ export function BottomNav() {
       ))}
     </nav>
   );
+}
+
+export function LoadErrorBar() {
+  const { loadFailed, retryLoad } = useAppState();
+  if (!loadFailed) return null;
+  return <div className="mx-auto max-w-[1400px] px-4 md:px-6"><ErrorBar message="We couldn't load your plan and shortlists." onRetry={retryLoad} /></div>;
 }
 
 export function PlanBanner() {

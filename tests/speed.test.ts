@@ -4,7 +4,15 @@ import { COMPANY, admin, api, asUser, resetCompany, signIn } from './helpers';
 afterAll(() => resetCompany('acme')); // these tests switch acme to paid; don't leave it that way for manual testing
 
 const p95 = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.ceil(xs.length * 0.95) - 1];
-const time = async (fn: () => Promise<unknown>) => { const t = performance.now(); await fn(); return performance.now() - t; };
+// A fast error would look like a fast search, so every timed request must also be a 200 with results.
+const time = async (fn: () => Promise<{ status: number; body: { results?: unknown[] } }>) => {
+  const t = performance.now();
+  const r = await fn();
+  const ms = performance.now() - t;
+  expect(r.status).toBe(200);
+  expect(Array.isArray(r.body.results)).toBe(true);
+  return ms;
+};
 
 describe('speed (our targets have margin: the grader allows 300 ms / 3 s)', () => {
   it('paging p95 < 150 ms', async () => {
@@ -15,7 +23,13 @@ describe('speed (our targets have margin: the grader allows 300 ms / 3 s)', () =
     await db.rpc('complete_search', { p_search: id, p_filters: { roles: ['Full Stack Engineer'] } });
     await api(t, 'GET', `/api/search/${id}?page=1`); // warm up
     const times: number[] = [];
-    for (let i = 0; i < 40; i++) times.push(await time(() => api(t, 'GET', `/api/search/${id}?page=${(i % 20) + 1}`)));
+    for (let i = 0; i < 40; i++) {
+      times.push(await time(async () => {
+        const r = await api(t, 'GET', `/api/search/${id}?page=${(i % 20) + 1}`);
+        expect(r.body.results).toHaveLength(20); // 586 full stack engineers: pages 1-20 are all full
+        return r;
+      }));
+    }
     console.log(`paging p95 ${p95(times).toFixed(0)} ms`);
     expect(p95(times)).toBeLessThan(150);
   });

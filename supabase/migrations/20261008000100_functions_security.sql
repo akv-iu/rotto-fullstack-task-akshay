@@ -29,6 +29,8 @@ as $$
     or public.f_arr(f, 'any_skills') is not null or public.f_arr(f, 'companies') is not null
     or public.f_arr(f, 'current_companies') is not null or public.f_arr(f, 'degrees') is not null
     or public.f_arr(f, 'fields') is not null or public.f_arr(f, 'schools') is not null
+    or public.f_arr(f, 'not_skills') is not null or public.f_arr(f, 'not_companies') is not null
+    or public.f_txt(f, 'never_company_type') is not null
     or coalesce(public.f_num(f, 'min_years'), 0) > 0 or coalesce(public.f_num(f, 'max_years'), 15) < 15
     or jsonb_typeof(f -> 'open_to_work') = 'boolean'  -- true: open to work; false: not open
     or public.f_txt(f, 'worked_at_company_type') is not null or public.f_txt(f, 'current_company_type') is not null)
@@ -44,6 +46,8 @@ as $$
            public.f_arr(f, 'skills') skills, public.f_arr(f, 'any_skills') any_skills, public.f_arr(f, 'companies') companies,
            public.f_arr(f, 'current_companies') current_companies, public.f_arr(f, 'degrees') degrees,
            public.f_arr(f, 'fields') fields, public.f_arr(f, 'schools') schools,
+           public.f_arr(f, 'not_skills') not_skills, public.f_arr(f, 'not_companies') not_companies,
+           public.f_txt(f, 'never_company_type') never_type,
            public.f_num(f, 'min_years') min_years, public.f_num(f, 'max_years') max_years,
            case when jsonb_typeof(f -> 'open_to_work') = 'boolean' then (f ->> 'open_to_work')::boolean end want_open,
            public.f_txt(f, 'worked_at_company_type') worked_type, public.f_txt(f, 'current_company_type') current_type,
@@ -69,14 +73,21 @@ as $$
       and (p.want_open is null or c.open_to_work = p.want_open)
       and (p.worked_type is null or c.company_types @> array[p.worked_type])
       and (p.current_type is null or c.current_company_type = p.current_type)
-  )
-  select jsonb_build_object(
-    'total', (select count(*) from m),
+      and (p.not_skills is null or not c.skills && p.not_skills)
+      and (p.not_companies is null or not c.companies && p.not_companies)
+      and (p.never_type is null or not c.company_types @> array[p.never_type])
+  ),
+  -- Last line of defence: filters that match every candidate (e.g. all 10 cities, however they got past the app's
+  -- checks) return nobody. "Never return everyone" then holds whatever the filter JSON says.
+  n as (select count(*) total, count(*) = (select count(*) from public.candidates) everyone from m)
+  select case when (select everyone from n) then jsonb_build_object('total', 0, 'results', '[]'::jsonb)
+  else jsonb_build_object(
+    'total', (select total from n),
     'results', coalesce((
       select jsonb_agg(to_jsonb(r) order by r.open_to_work desc, r.years_experience desc, r.id)
       from (select * from m order by open_to_work desc, years_experience desc, id
             limit least(greatest(lim, 0), 100) offset greatest(off, 0)) r
-    ), '[]'::jsonb))
+    ), '[]'::jsonb)) end
 $$;
 
 -- ---------- quota: the only way searches are created or changed ----------
@@ -125,8 +136,10 @@ begin
     from public.searches p join public.searches r on r.id = coalesce(p.root_id, p.id)
    where p.id = p_parent and p.company_id = cid and p.status = 'ready' and r.status = 'ready';
   if not found then return jsonb_build_object('error', 'not_found'); end if;
+  -- Free plan: 10 corrections per search, so rewriting the filters can't stand in for new searches. Paid: no cap.
   update public.searches set corrections_used = corrections_used + 1
-   where id = root_row.id and corrections_used < 10;
+   where id = root_row.id
+     and (corrections_used < 10 or exists (select 1 from public.companies where id = cid and plan = 'paid'));
   if not found then return jsonb_build_object('error', 'cap'); end if;
   insert into public.searches (company_id, brief, filters, status, root_id)
   values (cid, root_row.brief, p_filters, 'ready', root_row.id) returning id into sid;
@@ -143,8 +156,10 @@ declare cid uuid; eff text;
 begin
   insert into public.billing_events (event_id) values (p_event_id) on conflict do nothing;
   if not found then return 'duplicate'; end if;
-  -- Lock the company row: concurrent events for one company apply one at a time, so the plan below never reads stale state.
-  select id into cid from public.companies where slug = p_company for update;
+  -- Lock every company row, always in the same order, before touching any: events apply one at a time, the plan below
+  -- never reads stale state, and two events for different companies can't each hold one row and wait for the other.
+  perform 1 from public.companies order by id for update;
+  select id into cid from public.companies where slug = p_company;
   if cid is null then return 'unknown_company'; end if;
   eff := case when p_type = 'customer.subscription.deleted' then 'canceled' else p_status end;
   -- Older events never overwrite newer state; on a same-second tie a cancellation wins.

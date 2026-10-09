@@ -1,7 +1,7 @@
 import { CHIP_LABELS, LIST_KEYS, type Filters, type ListKey } from '@/lib/shared/filters';
 import { VOCAB } from '@/lib/shared/vocab';
 
-export type ScalarKey = 'min_years' | 'max_years' | 'open_to_work' | 'worked_at_company_type' | 'current_company_type';
+export type ScalarKey = 'min_years' | 'max_years' | 'open_to_work' | 'worked_at_company_type' | 'current_company_type' | 'never_company_type';
 export type Chip =
   | { kind: 'list'; key: ListKey; value: string; label: string; text: string }
   | { kind: 'group'; key: 'roles'; values: readonly string[]; label: string; text: string }
@@ -9,7 +9,7 @@ export type Chip =
   | { kind: 'unsupported'; index: number; text: string; reason: 'unsupported' | 'unclear' };
 
 // Display order: who, where, what they know, where they worked, education.
-const ORDER: ListKey[] = ['roles', 'seniorities', 'cities', 'skills', 'any_skills', 'companies', 'current_companies', 'degrees', 'fields', 'schools'];
+const ORDER: ListKey[] = ['roles', 'seniorities', 'cities', 'skills', 'any_skills', 'not_skills', 'companies', 'current_companies', 'not_companies', 'degrees', 'fields', 'schools'];
 
 /** Every engineering role. "engineers in Texas" sets all of them; one chip reads better than seven. */
 export const ENGINEERING_ROLES: readonly string[] = VOCAB.roles.filter((r) => r.endsWith('Engineer'));
@@ -32,6 +32,7 @@ export function chipsOf(f: Filters): Chip[] {
   if (f.open_to_work != null) chips.push({ kind: 'scalar', key: 'open_to_work', label: '', text: f.open_to_work ? 'Open to work' : 'Not open to work' });
   if (f.worked_at_company_type) chips.push({ kind: 'scalar', key: 'worked_at_company_type', label: CHIP_LABELS.worked_at_company_type, text: f.worked_at_company_type });
   if (f.current_company_type) chips.push({ kind: 'scalar', key: 'current_company_type', label: CHIP_LABELS.current_company_type, text: f.current_company_type });
+  if (f.never_company_type) chips.push({ kind: 'scalar', key: 'never_company_type', label: CHIP_LABELS.never_company_type, text: f.never_company_type });
   (f.unsupported ?? []).forEach((u, index) => chips.push({ kind: 'unsupported', index, text: u.text, reason: u.reason }));
   return chips;
 }

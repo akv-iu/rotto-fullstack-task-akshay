@@ -1,7 +1,7 @@
 'use client';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { AppStateProvider, BottomNav, TopBar } from '@/components/app-shell';
+import { AppStateProvider, BottomNav, LoadErrorBar, TopBar } from '@/components/app-shell';
 import { Skeleton } from '@/components/ui';
 import { searchCache } from '@/lib/client/search-cache';
 import { supabase } from '@/lib/client/supabase';
@@ -28,6 +28,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <AppStateProvider>
       <TopBar />
+      <LoadErrorBar />
       <main className="mx-auto max-w-[1400px] pb-20 md:pb-0">{children}</main>
       <BottomNav />
     </AppStateProvider>

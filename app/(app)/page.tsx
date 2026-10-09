@@ -75,6 +75,10 @@ function SearchView() {
   const lastRequest = useRef<{ body: object; kind: 'searching' | 'refining' } | null>(null);
   const startedFromSaved = useRef(false);
   const restored = useRef<string | null>(cached?.result.search_id ?? null);
+  // Each request that replaces the results takes a number; an answer is used only if no newer request started since
+  // (a slow page or an old restore must never land on top of newer results). `running` marks a search in flight.
+  const latest = useRef(0);
+  const running = useRef(false);
   const outOfSearches = plan?.plan === 'free' && plan.searches_remaining === 0;
   // Before the first search the page is a landing page (centred headline + big search box, like rotto.com);
   // once there is a search it becomes the working layout (search bar on top, chips, results).
@@ -90,10 +94,13 @@ function SearchView() {
   )), [rows, filters, openId]);
 
   const run = useCallback(async (body: object, kind: 'searching' | 'refining', label: string) => {
+    const mine = ++latest.current;
+    running.current = true;
     lastRequest.current = { body, kind };
-    setStatus(kind); setError(null); setSaveState('idle');
+    setStatus(kind); setError(null); setSaveState('idle'); setMoreState('idle');
     try {
       const r = await api<SearchResponse>('/api/search', { method: 'POST', body });
+      if (mine !== latest.current) return;
       setResult(r); setRows(r.results); setPage(1); setSearchedBrief(label); setStatus('done'); setMoreState('idle');
       // Keep the search in the URL: leaving the page or reloading brings it back, so a free user can still refine it.
       restored.current = r.search_id;
@@ -101,10 +108,12 @@ function SearchView() {
       rememberLast(r.search_id);
       router.replace(`/?search=${r.search_id}`, { scroll: false });
     } catch (e) {
+      if (mine !== latest.current) return;
       const err = e as ApiError;
       if (err.status === 402) { openUpgrade(); setStatus(result ? 'done' : 'idle'); }
       else { setError(err.message); setStatus('error'); }
     } finally {
+      if (mine === latest.current) running.current = false;
       refreshPlan().catch(() => {});
     }
   }, [openUpgrade, refreshPlan, result, router]);
@@ -114,26 +123,29 @@ function SearchView() {
   // /?new (the Rotto logo) shows an empty search; the last search stays remembered for the Search tab.
   useEffect(() => {
     if (params.has('new')) {
-      restored.current = null;
-      setResult(null); setRows([]); setBrief(''); setSearchedBrief(''); setStatus('idle'); setError(null); setOpenId(null);
+      latest.current++; running.current = false; restored.current = null;
+      setResult(null); setRows([]); setBrief(''); setSearchedBrief(''); setStatus('idle'); setError(null); setOpenId(null); setMoreState('idle');
       return;
     }
     const id = params.get('search');
     if (!id && !params.get('saved')) {
+      if (running.current) return; // a search is on its way (e.g. a saved re-run); don't bring back the old one over it
       const last = readLast();
       if (last) router.replace(`/?search=${last}`, { scroll: false }); // already showing it (from memory)? the effect below skips the fetch
       return;
     }
     if (!id || restored.current === id) return;
     restored.current = id;
+    const mine = ++latest.current;
     setStatus('refining');
     api<PageResponse>(`/api/search/${id}?page=1`)
       .then((r) => {
+        if (mine !== latest.current) return;
         setResult({ search_id: id, filters: r.filters, total: r.total, results: r.results, searches_remaining: null });
         setRows(r.results); setPage(1); setStatus('done');
         const saved = readBrief(id); setSearchedBrief(saved); setBrief(saved); // show what these results are for
       })
-      .catch(() => { rememberLast(null); setStatus('idle'); router.replace('/'); }); // e.g. another company's search after a sign-in switch
+      .catch(() => { if (mine !== latest.current) return; rememberLast(null); setStatus('idle'); router.replace('/'); }); // e.g. another company's search after a sign-in switch
   }, [params, router]);
 
   // Re-run a saved search: /?saved=<id>&brief=<text> (from the Saved searches page). Guarded for React StrictMode.
@@ -168,11 +180,13 @@ function SearchView() {
 
   async function loadMore() {
     if (!result) return;
+    const mine = latest.current; // a new search or refine since then makes this page belong to old results
     setMoreState('loading');
     try {
       const r = await api<PageResponse>(`/api/search/${result.search_id}?page=${page + 1}`);
+      if (mine !== latest.current) return;
       setRows((prev) => [...prev, ...r.results]); setPage(page + 1); setMoreState('idle');
-    } catch { setMoreState('error'); }
+    } catch { if (mine === latest.current) setMoreState('error'); }
   }
 
   async function save() {

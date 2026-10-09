@@ -10,8 +10,10 @@ export type Filters = {
   cities?: string[];
   skills?: string[]; // must have ALL
   any_skills?: string[]; // must have AT LEAST ONE
+  not_skills?: string[]; // must have NONE of them
   companies?: string[]; // any job in the history
   current_companies?: string[];
+  not_companies?: string[]; // never worked at any of them (any job)
   degrees?: string[];
   fields?: string[];
   schools?: string[];
@@ -20,6 +22,7 @@ export type Filters = {
   open_to_work?: boolean; // true: only people open to work; false: only people who are not
   worked_at_company_type?: CompanyType; // any job in the history
   current_company_type?: CompanyType;
+  never_company_type?: CompanyType; // no job of this type, ever
   unsupported?: Unsupported[]; // non-empty → zero results
 };
 
@@ -30,8 +33,10 @@ export const LIST_KEYS = {
   cities: 'cities',
   skills: 'skills',
   any_skills: 'skills',
+  not_skills: 'skills',
   companies: 'companies',
   current_companies: 'companies',
+  not_companies: 'companies',
   degrees: 'degrees',
   fields: 'fields',
   schools: 'schools',
@@ -46,8 +51,10 @@ export const CHIP_LABELS: Record<Exclude<keyof Filters, 'unsupported'>, string> 
   cities: 'City',
   skills: 'Skill',
   any_skills: 'Any of',
+  not_skills: "Doesn't know",
   companies: 'Worked at',
   current_companies: 'Currently at',
+  not_companies: 'Never worked at',
   degrees: 'Degree',
   fields: 'Studied',
   schools: 'School',
@@ -56,6 +63,7 @@ export const CHIP_LABELS: Record<Exclude<keyof Filters, 'unsupported'>, string> 
   open_to_work: 'Open to work',
   worked_at_company_type: 'Worked at a',
   current_company_type: 'Currently at a',
+  never_company_type: 'Never worked at a',
 };
 
 const MAX_TEXT = 120;
@@ -83,22 +91,27 @@ export function cleanFilters(input: unknown): { filters: Filters; runnable: bool
 
   for (const [key, value] of Object.entries(input)) {
     if (value === null || value === undefined) continue;
-    if (key in LIST_KEYS) {
+    if (Object.hasOwn(LIST_KEYS, key)) { // not `in`: that also matches inherited names like "toString"
       const values = list.safeParse(value);
       if (!values.success) { reject(show(key, value)); continue; }
       const allowed = VOCAB[LIST_KEYS[key as ListKey]] as readonly string[];
       const kept = [...new Set(values.data.filter((v) => allowed.includes(v)))];
       for (const v of values.data) if (!allowed.includes(v)) reject(v);
-      if (kept.length) filters[key as ListKey] = kept;
+      // Every possible value ("all 10 cities") narrows nothing, so it is dropped: listing everything can't fetch everyone.
+      // Not for `skills` ("has ALL of these") or the exclusions ("has NONE of these"): those still narrow.
+      const narrowsNothing = !['skills', 'not_skills', 'not_companies'].includes(key) && kept.length === allowed.length;
+      if (kept.length && !narrowsNothing) filters[key as ListKey] = kept;
     } else if (key === 'min_years' || key === 'max_years') {
       const n = years.safeParse(value);
       if (!n.success) { reject(show(key, value)); continue; }
-      const y = Math.min(Math.max(Math.round(n.data), 0), MAX_YEARS);
+      // Whole years, rounded so the bound never lets in someone outside it ("at least 2.5" -> 3). Not clamped to the
+      // data's 0-15: "more than 15 years" (16) must find nobody, not the 15-year people.
+      const y = key === 'min_years' ? Math.ceil(n.data) : Math.floor(n.data);
       if (key === 'min_years' ? y > 0 : y < MAX_YEARS) filters[key] = y; // 0+ and 15- years mean "anyone": dropped
     } else if (key === 'open_to_work') {
       if (typeof value !== 'boolean') reject(show(key, value));
       else filters.open_to_work = value;
-    } else if (key === 'worked_at_company_type' || key === 'current_company_type') {
+    } else if (key === 'worked_at_company_type' || key === 'current_company_type' || key === 'never_company_type') {
       const t = companyType.safeParse(value);
       if (t.success) filters[key] = t.data;
       else reject(show(key, value));

@@ -79,14 +79,14 @@ export async function newSearch(ctx: Ctx, brief: string): Promise<SearchResponse
   return finish(ctx, id, clean);
 }
 
-/** Correction: no AI, no quota; capped at 10 per original search. */
+/** Correction: no AI, no quota; 10 per original search on the free plan, no cap on paid. */
 export async function correctSearch(ctx: Ctx, parentId: string, rawFilters: unknown): Promise<SearchResponse> {
   requireUuid(parentId, 'search');
   const clean = cleanFilters(rawFilters);
   if (!clean) throw new HttpError(400, 'The filters must be a JSON object.');
   const r = must(await ctx.db.rpc('create_correction', { p_parent: parentId, p_filters: clean.filters })) as { id?: string; error?: string };
   if (r.error === 'not_found') throw new HttpError(404, 'That search was not found.');
-  if (r.error === 'cap') throw new HttpError(429, "You've refined this search 10 times. Start a new search to keep going.");
+  if (r.error === 'cap') throw new HttpError(429, "The free plan allows 10 filter changes per search, and this one has used them. Upgrade to keep refining.");
   return firstPage(ctx, r.id!, clean);
 }
 
