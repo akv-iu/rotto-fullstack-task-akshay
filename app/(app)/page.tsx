@@ -188,7 +188,11 @@ function SearchView() {
   }, [cached]);
 
   const search = () => { const text = brief.trim(); if (text) run({ brief: text }, 'searching', text); };
-  const refine = (filters: Filters) => result && run({ parent_search_id: result.search_id, filters }, 'refining', searchedBrief);
+  const refine = (filters: Filters) => {
+    // Picking the value a chip already has changes nothing: no request, and none of the 10 edits used.
+    if (!result || JSON.stringify(filters) === JSON.stringify(result.filters)) return;
+    run({ parent_search_id: result.search_id, filters }, 'refining', searchedBrief);
+  };
 
   async function loadMore() {
     if (!result) return;

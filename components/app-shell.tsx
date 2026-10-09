@@ -80,7 +80,7 @@ export function TopBar() {
         <div className="ml-auto flex items-center gap-1 sm:gap-3">
           <PlanStatus />
           <ThemeToggle />
-          <Button variant="quiet" aria-label="Sign out" onClick={() => supabase.auth.signOut()} className="min-w-11 px-1"><SignOut size={18} /></Button>
+          <Button variant="quiet" aria-label="Sign out" title="Sign out" onClick={() => supabase.auth.signOut()} className="min-w-11 px-1"><SignOut size={18} /></Button>
         </div>
       </div>
     </header>

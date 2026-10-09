@@ -31,7 +31,7 @@ export function ChipBar({ filters, onChange, disabled }: Props) {
 
 function RemoveButton({ label, onClick, disabled }: { label: string; onClick: () => void; disabled?: boolean }) {
   return (
-    <button type="button" aria-label={`Remove ${label}`} disabled={disabled} onClick={onClick}
+    <button type="button" aria-label={`Remove ${label}`} title={`Remove ${label}`} disabled={disabled} onClick={onClick}
       className="-my-2 grid size-11 place-items-center rounded-full text-muted hover:text-ink md:my-0 md:size-7"><X size={12} weight="bold" /></button>
   );
 }
@@ -66,9 +66,11 @@ function ChipView({ chip, filters, onChange, disabled }: { chip: Chip } & Props)
             ) : chip.key === 'min_years' || chip.key === 'max_years' ? (
               <YearsPicker initial={filters[chip.key] ?? 0} onPick={(n) => { setOpen(false); onChange(setScalar(filters, chip.key as 'min_years', n)); }} />
             ) : chip.key === 'open_to_work' ? (
-              <OpenToWorkPicker onPick={(v) => { setOpen(false); onChange(setScalar(filters, 'open_to_work', v)); }} />
+              <ChoicePicker choices={[[true, 'Open to work'], [false, 'Not open to work']]} current={filters.open_to_work}
+                onPick={(v) => { setOpen(false); onChange(setScalar(filters, 'open_to_work', v)); }} />
             ) : (
-              <CompanyTypePicker onPick={(t) => { setOpen(false); onChange(setScalar(filters, chip.key as 'worked_at_company_type', t)); }} />
+              <ChoicePicker choices={COMPANY_TYPES} current={filters[chip.key as 'worked_at_company_type']}
+                onPick={(t) => { setOpen(false); onChange(setScalar(filters, chip.key as 'worked_at_company_type', t)); }} />
             )}
           </Popover.Content>
         </Popover.Portal>
@@ -114,21 +116,17 @@ function YearsPicker({ initial, onPick }: { initial: number; onPick: (n: number)
   );
 }
 
-function OpenToWorkPicker({ onPick }: { onPick: (open: boolean) => void }) {
-  return (
-    <div className="grid gap-1">
-      {([[true, 'Open to work'], [false, 'Not open to work']] as const).map(([v, label]) => (
-        <button key={label} type="button" onClick={() => onPick(v)} className="rounded-md px-2.5 py-1.5 text-left text-sm hover:bg-bg">{label}</button>
-      ))}
-    </div>
-  );
-}
+const COMPANY_TYPES: ['startup' | 'enterprise', string][] = [['startup', 'startup'], ['enterprise', 'enterprise']];
 
-function CompanyTypePicker({ onPick }: { onPick: (t: 'startup' | 'enterprise') => void }) {
+/** A two-way choice (open to work, startup or enterprise) that ticks the current value, like the option lists. */
+function ChoicePicker<T extends string | boolean>({ choices, current, onPick }: { choices: [T, string][]; current: T | undefined; onPick: (v: T) => void }) {
   return (
     <div className="grid gap-1">
-      {(['startup', 'enterprise'] as const).map((t) => (
-        <button key={t} type="button" onClick={() => onPick(t)} className="rounded-md px-2.5 py-1.5 text-left text-sm hover:bg-bg">{t}</button>
+      {choices.map(([v, label]) => (
+        <button key={label} type="button" onClick={() => onPick(v)} aria-current={v === current || undefined}
+          className={cx('flex min-h-11 w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-sm hover:bg-bg md:min-h-0', v === current && 'bg-accent-soft font-medium text-accent')}>
+          {label}{v === current && <span aria-hidden>✓</span>}
+        </button>
       ))}
     </div>
   );
@@ -165,7 +163,7 @@ function AddFilter({ filters, onChange, disabled }: Props) {
             </ul>
           )}
           {step === 'min_years' && <YearsPicker initial={5} onPick={(n) => close(setScalar(filters, 'min_years', n))} />}
-          {step === 'worked_at_company_type' && <CompanyTypePicker onPick={(t) => close(setScalar(filters, 'worked_at_company_type', t))} />}
+          {step === 'worked_at_company_type' && <ChoicePicker choices={COMPANY_TYPES} current={filters.worked_at_company_type} onPick={(t) => close(setScalar(filters, 'worked_at_company_type', t))} />}
           {step && step !== 'min_years' && step !== 'worked_at_company_type' && step !== 'open_to_work' && (
             <OptionPicker listKey={step} onPick={(v) => close(replaceValue(filters, step, null, v))} />
           )}

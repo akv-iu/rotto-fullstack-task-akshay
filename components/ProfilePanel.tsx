@@ -48,7 +48,7 @@ export function ProfilePanel({ id, highlight, onClose }: { id: string; highlight
     <>
       <div className="flex items-start justify-between">
         {person ? <Avatar src={person.avatar_url} name={person.full_name} className="size-14 text-base" /> : <Skeleton className="size-14 rounded-full" />}
-        <Button variant="quiet" aria-label="Close profile" onClick={onClose} className="min-w-11 px-1"><X size={20} /></Button>
+        <Button variant="quiet" aria-label="Close profile" title="Close profile" onClick={onClose} className="min-w-11 px-1"><X size={20} /></Button>
       </div>
       {error && <p role="alert" className="mt-4 text-danger">{error}</p>}
       {!person && !error && <div className="mt-4 space-y-3" aria-busy="true"><Skeleton className="h-5 w-40" /><Skeleton className="h-4 w-60" /><Skeleton className="h-24 w-full" /></div>}

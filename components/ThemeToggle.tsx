@@ -26,7 +26,7 @@ export function ThemeToggle() {
   }
   return (
     <Button variant="quiet" onClick={toggle} className="min-w-11 px-1"
-      aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}>
+      aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'} title={dark ? 'Switch to light mode' : 'Switch to dark mode'}>
       {dark === null ? <span className="size-[18px]" /> : dark ? <Sun size={18} /> : <Moon size={18} />}
     </Button>
   );

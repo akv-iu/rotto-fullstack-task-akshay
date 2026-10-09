@@ -80,7 +80,7 @@ export function ShortlistButton({ candidateId, name, compact, block }: { candida
             {stale && (
               <p role="alert" className="px-2 pt-2 text-sm text-danger">
                 Couldn&apos;t refresh your lists, so these ticks may be out of date.{' '}
-                <button type="button" onClick={refresh} className="font-medium underline">Try again</button>
+                <button type="button" onClick={refresh} disabled={busy} className="inline-flex min-h-11 items-center font-medium underline md:min-h-0">Try again</button>
               </p>
             )}
           </Popover.Content>
