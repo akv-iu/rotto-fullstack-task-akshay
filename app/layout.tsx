@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Montserrat } from 'next/font/google';
+import { Analytics } from '@vercel/analytics/next';
 import './globals.css';
 
 // Rotto's own site uses a geometric sans like Montserrat.
@@ -15,7 +16,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Apply a saved light/dark choice before the first paint, so the page never flashes the wrong theme. */}
         <script dangerouslySetInnerHTML={{ __html: "try{var t=localStorage.getItem('theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}" }} />
       </head>
-      <body className="min-h-dvh font-sans text-[15px] antialiased">{children}</body>
+      <body className="min-h-dvh font-sans text-[15px] antialiased">
+        {children}
+        <Analytics />
+      </body>
     </html>
   );
 }
