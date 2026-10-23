@@ -10,7 +10,7 @@ import { ErrorBar } from './search/states';
 import { ThemeToggle } from './ThemeToggle';
 import { Button, Skeleton, cx } from './ui';
 
-export type Plan = { plan: 'free' | 'paid'; searches_remaining: number | null };
+export type Plan = { plan: 'free' | 'paid'; searches_remaining: number | null; demo?: boolean };
 export type ShortlistSummary = { id: string; name: string; count: number; candidate_ids: string[] };
 
 type AppState = {
@@ -41,7 +41,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   // An upgrade lands through the billing webhook, not through this page: re-read the plan when the recruiter comes back
   // to the tab, and every 15 s while a free company is out of searches, so the search box unlocks without a reload.
-  const waitingForUpgrade = plan?.plan === 'free' && plan.searches_remaining === 0;
+  const waitingForUpgrade = plan?.plan === 'free' && !plan.demo && plan.searches_remaining === 0;
   useEffect(() => {
     const check = () => { refreshPlan().catch(() => {}); };
     window.addEventListener('focus', check);
@@ -67,6 +67,7 @@ const isActive = (pathname: string, href: string) => (href === '/' ? pathname ==
 
 export function TopBar() {
   const pathname = usePathname();
+  const { plan } = useAppState();
   return (
     <header className="sticky top-0 z-20 border-b border-line bg-surface">
       <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-3 px-4 md:gap-6 md:px-6">
@@ -80,7 +81,7 @@ export function TopBar() {
         <div className="ml-auto flex items-center gap-1 sm:gap-3">
           <PlanStatus />
           <ThemeToggle />
-          <Button variant="quiet" aria-label="Sign out" title="Sign out" onClick={() => supabase.auth.signOut()} className="min-w-11 px-1"><SignOut size={18} /></Button>
+          {!plan?.demo && <Button variant="quiet" aria-label="Sign out" title="Sign out" onClick={() => supabase.auth.signOut()} className="min-w-11 px-1"><SignOut size={18} /></Button>}
         </div>
       </div>
     </header>
@@ -90,6 +91,7 @@ export function TopBar() {
 function PlanStatus() {
   const { plan, openUpgrade } = useAppState();
   if (!plan) return <Skeleton className="h-5 w-40" />;
+  if (plan.demo) return <span className="text-sm text-muted">{plan.searches_remaining} left today</span>;
   if (plan.plan === 'paid') return <span className="text-sm text-muted">Paid plan</span>;
   const n = plan.searches_remaining ?? 0;
   return (
@@ -123,6 +125,12 @@ export function LoadErrorBar() {
 
 export function PlanBanner() {
   const { plan, openUpgrade } = useAppState();
+  if (plan?.demo) return (
+    <div className="mb-4 rounded-xl border border-accent-line bg-accent-soft p-4 text-sm">
+      <p className="font-medium">{plan.searches_remaining === 0 ? "You've used today's five demo searches." : 'Try the public demo with sample candidate data.'}</p>
+      <p className="mt-1 text-muted">{plan.searches_remaining === 0 ? 'Come back tomorrow, or keep editing your last search filters.' : 'Five free AI searches per day. Filter edits are free. Your shortlists and saved searches stay in this browser’s workspace.'}</p>
+    </div>
+  );
   if (plan?.plan !== 'free' || plan.searches_remaining !== 0) return null;
   return (
     <div className="mb-4 flex flex-col gap-3 rounded-xl border border-accent-line bg-accent-soft p-4 sm:flex-row sm:items-center">

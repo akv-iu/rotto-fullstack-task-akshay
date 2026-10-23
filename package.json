@@ -8,6 +8,7 @@
   "scripts": {
     "db:setup": "(supabase start || supabase status) && supabase db reset && node scripts/setup-data.mjs",
     "dev": "node scripts/dev.mjs",
+    "prebuild": "node scripts/generate-vocab.mjs",
     "build": "node scripts/with-env.mjs next build",
     "test": "node scripts/with-env.mjs vitest run",
     "test:unit": "vitest run tests/unit",
@@ -18,7 +19,7 @@
     "@radix-ui/react-dialog": "^1.2.0",
     "@radix-ui/react-popover": "^1.2.0",
     "@supabase/supabase-js": "^2.117.3",
-    "next": "^16.4.0",
+    "next": "^16.4.2",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "server-only": "^0.0.1",

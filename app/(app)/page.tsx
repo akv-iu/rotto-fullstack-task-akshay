@@ -1,6 +1,6 @@
 'use client';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PlanBanner, useAppState } from '@/components/app-shell';
 import { ChipBar } from '@/components/search/ChipBar';
 import { ProfilePanel } from '@/components/ProfilePanel';
@@ -52,6 +52,14 @@ export default function SearchPage() {
   return <Suspense><SearchView /></Suspense>;
 }
 
+// Keep callbacks and the shortlist action inside the memo boundary so old rows can skip page appends.
+const SearchRow = memo(function SearchRow({ candidate, filters, selected, onOpen }: {
+  candidate: CandidateCard; filters: Filters; selected: boolean; onOpen: (id: string) => void;
+}) {
+  return <ResultRow candidate={candidate} filters={filters} selected={selected} onOpen={() => onOpen(candidate.id)}
+    action={<ShortlistButton candidateId={candidate.id} name={candidate.full_name} compact />} />;
+});
+
 function SearchView() {
   const { plan, refreshPlan, openUpgrade } = useAppState();
   const params = useSearchParams();
@@ -83,15 +91,14 @@ function SearchView() {
   const outOfSearches = plan?.plan === 'free' && plan.searches_remaining === 0;
   // Before the first search the page is a landing page (centred headline + big search box, like rotto.com);
   // once there is a search it becomes the working layout (search bar on top, chips, results).
-  const hero = !result && status !== 'searching' && status !== 'refining';
+  const hero = !result && status === 'idle';
   const typed = useTypewriter(EXAMPLES, hero && !brief && !outOfSearches);
   const savable = Boolean(searchedBrief && result && Object.keys(result.filters).length && !result.filters.unsupported);
   // Typing in the search box re-renders this page; without this, every keystroke also re-rendered every result row
   // (150 ms per key with 300 rows loaded). The list only changes when the rows, the filters or the open profile change.
   const filters = result?.filters;
   const resultRows = useMemo(() => filters && rows.map((c) => (
-    <ResultRow key={c.id} candidate={c} filters={filters} selected={openId === c.id} onOpen={() => setOpenId(c.id)}
-      action={<ShortlistButton candidateId={c.id} name={c.full_name} compact />} />
+    <SearchRow key={c.id} candidate={c} filters={filters} selected={openId === c.id} onOpen={setOpenId} />
   )), [rows, filters, openId]);
 
   const run = useCallback(async (body: object, kind: 'searching' | 'refining', label: string) => {
@@ -244,7 +251,7 @@ function SearchView() {
           </Button>
         </form>
         </div>
-        {outOfSearches && <p id="brief-help" className={cx("mt-1.5 text-sm text-muted", hero && "text-center")}>New searches need the paid plan. You can still change the filters of your last search.</p>}
+        {outOfSearches && <p id="brief-help" className={cx("mt-1.5 text-sm text-muted", hero && "text-center")}>{plan?.demo ? 'Your demo allowance resets at midnight UTC. You can still change the filters of your last search.' : 'New searches need the paid plan. You can still change the filters of your last search.'}</p>}
 
         {status === 'idle' && !result && <FirstVisit onPick={setBrief} freeLeft={plan?.plan === 'free' ? plan.searches_remaining : null} />}
         {status === 'searching' && <SearchingSkeleton />}
@@ -253,7 +260,7 @@ function SearchView() {
           <ErrorBar message={error} onRetry={retry.current ?? undefined} />
         )}
 
-        {result && status !== 'searching' && (
+        {result && (status === 'done' || status === 'refining') && (
           <div className="mt-4 space-y-3">
             <ChipBar filters={result.filters} onChange={refine} disabled={status === 'refining'} />
             <div className="flex items-center justify-between text-sm">
@@ -281,7 +288,7 @@ function SearchView() {
           </div>
         )}
       </section>
-      {openId && result && (
+      {openId && result && status === 'done' && (
         <ProfilePanel id={openId} onClose={() => setOpenId(null)}
           highlight={new Set([...(result.filters.skills ?? []), ...(result.filters.any_skills ?? [])])} />
       )}

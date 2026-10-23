@@ -88,6 +88,20 @@ describe('acme cannot change anything it does not own, directly through Supabase
     expect((await acme.rpc('current_company_id')).data).toBe(COMPANY.acme);
   });
 
+  it('the paging lookup exposes only a ready search owned by the recruiter', async () => {
+    const own = await acme.rpc('read_search', { p_search: acmeReady });
+    expect(own.error).toBeNull();
+    expect(own.data).toEqual({ filters: { roles: ['Recruiter'] } });
+    const foreignId = (await admin().from('searches').insert({ company_id: COMPANY.globex, brief: 'foreign', status: 'ready', filters: { roles: ['Recruiter'] } }).select('id').single()).data!.id;
+    const foreign = await acme.rpc('read_search', { p_search: foreignId });
+    expect(foreign.error).toBeNull();
+    expect(foreign.data).toBeNull();
+    const id = (await admin().from('searches').insert({ company_id: COMPANY.acme, brief: 'pending', status: 'pending' }).select('id').single()).data!.id;
+    const unfinished = await acme.rpc('read_search', { p_search: id });
+    expect(unfinished.error).toBeNull();
+    expect(unfinished.data).toBeNull();
+  });
+
   it('cannot branch a correction off a finished globex search', async () => {
     const ready = (await admin().from('searches').insert({ company_id: COMPANY.globex, brief: 'g', status: 'ready', filters: { roles: ['Recruiter'] } }).select('id').single()).data!.id;
     expect((await acme.rpc('create_correction', { p_parent: ready, p_filters: { roles: ['Recruiter'] } })).data).toEqual({ error: 'not_found' });
@@ -120,5 +134,6 @@ describe('signed-out visitors get nothing', () => {
   it('cannot call the search or quota functions', async () => {
     expect((await anon().rpc('search_candidates', { f: { roles: ['Recruiter'] }, lim: 20, off: 0 })).error?.code).toBe('42501');
     expect((await anon().rpc('reserve_search', { p_brief: 'x' })).error?.code).toBe('42501');
+    expect((await anon().rpc('read_search', { p_search: acmeReady })).error?.code).toBe('42501');
   });
 });

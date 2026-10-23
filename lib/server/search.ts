@@ -17,8 +17,9 @@ const NOT_COUNTED = "The search didn't go through. It wasn't counted against you
 const NOT_SURE = "The search didn't go through. Please try again in a moment.";
 type Clean = { filters: Filters; runnable: boolean };
 
-export async function getPlan(ctx: Ctx): Promise<{ plan: 'free' | 'paid'; searches_remaining: number | null }> {
-  const c = must(await ctx.db.from('companies').select('plan, searches_used').eq('id', ctx.companyId).single())!; // .single() errors (→ 500) if the row is missing
+export async function getPlan(ctx: Ctx): Promise<{ plan: 'free' | 'paid'; searches_remaining: number | null; demo?: boolean }> {
+  const c = must(await ctx.db.from('companies').select('plan, searches_used, is_demo, searches_day').eq('id', ctx.companyId).single())!; // .single() errors (→ 500) if the row is missing
+  if (c.is_demo) return { plan: 'free', demo: true, searches_remaining: c.searches_day === new Date().toISOString().slice(0, 10) ? Math.max(0, 5 - c.searches_used) : 5 };
   return c.plan === 'paid'
     ? { plan: 'paid', searches_remaining: null }
     : { plan: 'free', searches_remaining: Math.max(0, 1 - c.searches_used) };
@@ -26,19 +27,22 @@ export async function getPlan(ctx: Ctx): Promise<{ plan: 'free' | 'paid'; search
 
 // Recruiters can't query candidates themselves (that would skip the free-plan limit), so the search runs with the
 // server's key. Every caller has already checked the recruiter and that the search belongs to their company.
-async function runPage(_ctx: Ctx, clean: Clean, page: number): Promise<{ total: number; results: CandidateCard[] }> {
+async function runPage(clean: Clean, page: number): Promise<{ total: number; results: CandidateCard[] }> {
   if (!clean.runnable) return { total: 0, results: [] };
   return must(await adminClient().rpc('search_candidates', { f: clean.filters, lim: PAGE_SIZE, off: (page - 1) * PAGE_SIZE }));
 }
 
 async function firstPage(ctx: Ctx, searchId: string, clean: Clean): Promise<SearchResponse> {
-  const [page, plan] = await Promise.all([runPage(ctx, clean, 1), getPlan(ctx)]);
+  const [page, plan] = await Promise.all([runPage(clean, 1), getPlan(ctx)]);
   return { search_id: searchId, filters: clean.filters, ...page, searches_remaining: plan.searches_remaining };
 }
 
 async function reserve(ctx: Ctx, brief: string): Promise<string> {
   const id = must(await ctx.db.rpc('reserve_search', { p_brief: brief })) as string | null;
-  if (!id) throw new HttpError(402, "You've used your free search. Upgrade to run new searches.");
+  if (!id) {
+    if ((await getPlan(ctx)).demo) throw new HttpError(429, "Today's demo search allowance has been reached. Please try again tomorrow. You can still edit your existing search filters.");
+    throw new HttpError(402, "You've used your free search. Upgrade to run new searches.");
+  }
   return id;
 }
 
@@ -90,7 +94,7 @@ export async function correctSearch(ctx: Ctx, parentId: string, rawFilters: unkn
   const clean = cleanFilters(rawFilters);
   if (!clean) throw new HttpError(400, 'The filters must be a JSON object.');
   // Results first, then record the edit: a failed page query uses none of the 10 edits.
-  const [page, plan] = await Promise.all([runPage(ctx, clean, 1), getPlan(ctx)]);
+  const [page, plan] = await Promise.all([runPage(clean, 1), getPlan(ctx)]);
   const r = must(await ctx.db.rpc('create_correction', { p_parent: parentId, p_filters: clean.filters })) as { id?: string; error?: string };
   if (r.error === 'not_found') throw new HttpError(404, 'That search was not found.');
   if (r.error === 'cap') throw new HttpError(429, "The free plan allows 10 filter changes per search, and this one has used them. Upgrade to keep refining.");
@@ -107,12 +111,15 @@ export async function rerunSaved(ctx: Ctx, savedId: string): Promise<SearchRespo
 }
 
 /** Paging: never counts as a search; stored filters are re-checked on every read. */
-export async function getPage(ctx: Ctx, searchId: string, pageParam: string | null): Promise<PageResponse> {
+export async function getPage(db: Ctx['db'], searchId: string, pageParam: string | null): Promise<PageResponse> {
   const page = pageParam === null ? 1 : Number(pageParam);
   if (!Number.isInteger(page) || page < 1 || page > 10_000) throw new HttpError(400, 'The page must be a whole number from 1.');
   requireUuid(searchId, 'search');
-  const s = must(await ctx.db.from('searches').select('filters, status').eq('id', searchId).maybeSingle());
-  if (!s || s.status !== 'ready') throw new HttpError(404, 'That search was not found.');
+  // Authenticate and read the company's stored filters together, saving one database round trip on every page.
+  const response = await db.rpc('read_search', { p_search: searchId });
+  if (response.status === 401 || response.status === 403 || response.data?.error === 'unauthorized') throw new HttpError(401, 'Sign in to continue.');
+  const s = must(response);
+  if (!s) throw new HttpError(404, 'That search was not found.');
   const clean = cleanFilters(s.filters) ?? { filters: {}, runnable: false };
-  return { search_id: searchId, page, filters: clean.filters, ...(await runPage(ctx, clean, page)) };
+  return { search_id: searchId, page, filters: clean.filters, ...(await runPage(clean, page)) };
 }

@@ -150,7 +150,7 @@ auth (401) → brief 1–500 chars (400) → OpenAI key present? (503)
 
 Any other combination of fields → 400.
 
-**Paging** — `GET /api/search/{id}?page=N`: page an integer ≥ 1 (400) → load the search (own company, `ready`; otherwise 404) → re-clean the stored filters → `search_candidates(filters, 20, (N−1)×20)` → `{ search_id, page, filters, total, results }`. A page past the end returns an empty `results`. **Never counts as a search.**
+**Paging** — `GET /api/search/{id}?page=N`: page an integer ≥ 1 (400) → `read_search(id)` verifies the recruiter and loads their `ready` search in one call (RLS applies; missing or foreign searches return 404) → re-clean the stored filters → `search_candidates(filters, 20, (N−1)×20)` → `{ search_id, page, filters, total, results }`. A page past the end returns an empty `results`. **Never counts as a search.**
 
 **Result items** contain the card fields: `id`, `full_name`, `avatar_url`, `current_title`, `current_company`, `city`, `years_experience`, `open_to_work`, `skills`.
 

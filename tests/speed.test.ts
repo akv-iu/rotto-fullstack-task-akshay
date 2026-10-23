@@ -15,22 +15,26 @@ const time = async (fn: () => Promise<{ status: number; body: { results?: unknow
 };
 
 describe('speed (our targets have margin: the grader allows 300 ms / 3 s)', () => {
-  it('paging p95 < 150 ms', async () => {
+  it.each([
+    { name: 'role', filters: { roles: ['Full Stack Engineer'] }, pages: [1, 2, 10, 20] },
+    { name: 'broad experience', filters: { min_years: 1 }, pages: [1, 50, 100, 200] },
+    { name: 'city and skill', filters: { cities: ['New York'], skills: ['React'] }, pages: [1, 2, 3, 6] },
+  ])('paging p95 < 150 ms: $name', async ({ name, filters, pages }) => {
     const t = await signIn('acme');
     await admin().from('companies').update({ plan: 'paid' }).eq('id', COMPANY.acme);
     const db = asUser(t);
     const id = (await db.rpc('reserve_search', { p_brief: 'x' })).data;
-    await db.rpc('complete_search', { p_search: id, p_filters: { roles: ['Full Stack Engineer'] } });
+    await db.rpc('complete_search', { p_search: id, p_filters: filters });
     await api(t, 'GET', `/api/search/${id}?page=1`); // warm up
     const times: number[] = [];
     for (let i = 0; i < 40; i++) {
       times.push(await time(async () => {
-        const r = await api(t, 'GET', `/api/search/${id}?page=${(i % 20) + 1}`);
-        expect(r.body.results).toHaveLength(20); // 586 full stack engineers: pages 1-20 are all full
+        const r = await api(t, 'GET', `/api/search/${id}?page=${pages[i % pages.length]}`);
+        expect(r.body.results).toHaveLength(20);
         return r;
       }));
     }
-    console.log(`paging p95 ${p95(times).toFixed(0)} ms`);
+    console.log(`${name} paging p95 ${p95(times).toFixed(0)} ms`);
     expect(p95(times)).toBeLessThan(150);
   });
 

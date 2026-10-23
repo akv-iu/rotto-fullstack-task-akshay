@@ -9,13 +9,13 @@ import { chipsOf, display, optionsFor, removeChip, replaceGroup, replaceValue, s
 type Props = { filters: Filters; onChange: (filters: Filters) => void; disabled?: boolean };
 
 const POPOVER = 'z-30 w-64 rounded-xl border border-line bg-surface p-2 shadow-xl';
-const CHIP = 'inline-flex shrink-0 items-center rounded-full border text-sm';
+const CHIP = 'inline-flex min-w-0 max-w-full items-center rounded-full border text-sm [overflow-wrap:anywhere]';
 
 export function ChipBar({ filters, onChange, disabled }: Props) {
   const chips = chipsOf(filters);
   return (
     <div role="group" aria-label="Filters the search understood"
-      className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:flex-wrap md:overflow-visible md:px-0">
+      className="flex flex-wrap items-center gap-2 pb-1">
       {chips.map((chip) => (
         <ChipView key={chip.kind === 'unsupported' ? `u${chip.index}` : `${chip.key}:${chip.kind === 'list' ? chip.value : ''}`}
           chip={chip} filters={filters} onChange={onChange} disabled={disabled} />
@@ -32,7 +32,7 @@ export function ChipBar({ filters, onChange, disabled }: Props) {
 function RemoveButton({ label, onClick, disabled }: { label: string; onClick: () => void; disabled?: boolean }) {
   return (
     <button type="button" aria-label={`Remove ${label}`} title={`Remove ${label}`} disabled={disabled} onClick={onClick}
-      className="-my-2 grid size-11 place-items-center rounded-full text-muted hover:text-ink md:my-0 md:size-7"><X size={12} weight="bold" /></button>
+      className="grid size-11 shrink-0 place-items-center rounded-full text-muted hover:text-ink md:size-7"><X size={12} weight="bold" /></button>
   );
 }
 
@@ -52,7 +52,7 @@ function ChipView({ chip, filters, onChange, disabled }: { chip: Chip } & Props)
     <span className={cx(CHIP, 'border-border bg-surface pl-3', open && 'border-accent ring-2 ring-accent/20')}>
       <Popover.Root open={open} onOpenChange={setOpen}>
         <Popover.Trigger asChild disabled={disabled}>
-          <button type="button" className="min-h-11 py-1 md:min-h-0" aria-label={`Change ${name}`}>
+          <button type="button" className="min-h-11 min-w-0 py-1 text-left md:min-h-0" aria-label={`Change ${name}`}>
             {chip.label && <span className="text-muted">{chip.label} </span>}{chip.text}
           </button>
         </Popover.Trigger>

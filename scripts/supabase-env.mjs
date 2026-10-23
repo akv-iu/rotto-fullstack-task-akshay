@@ -17,17 +17,25 @@ function readStatus() {
 }
 
 export function supabaseEnv() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
+  const publishable = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  const secret = process.env.SUPABASE_SECRET_KEY;
+  if (url && publishable && secret) return {
+    SUPABASE_URL: url, SUPABASE_SECRET_KEY: secret,
+    NEXT_PUBLIC_SUPABASE_URL: url, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: publishable,
+  };
+  if (process.env.VERCEL) throw new Error('Set the hosted Supabase URL, publishable key, and server secret in Vercel.');
   const notRunning = new Error('Supabase is not running. Run `make setup` first.');
   const s = readStatus();
-  const url = s.API_URL;
+  const localUrl = s.API_URL;
   // Prefer the JWT keys (accepted by every Supabase API, including the auth admin API); fall back to the new key names.
-  const publishable = s.ANON_KEY ?? s.PUBLISHABLE_KEY;
-  const secret = s.SERVICE_ROLE_KEY ?? s.SECRET_KEY;
-  if (!url || !publishable || !secret) throw notRunning;
+  const localPublishable = s.ANON_KEY ?? s.PUBLISHABLE_KEY;
+  const localSecret = s.SERVICE_ROLE_KEY ?? s.SECRET_KEY;
+  if (!localUrl || !localPublishable || !localSecret) throw notRunning;
   return {
-    SUPABASE_URL: url,
-    SUPABASE_SECRET_KEY: secret,
-    NEXT_PUBLIC_SUPABASE_URL: url,
-    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: publishable,
+    SUPABASE_URL: localUrl,
+    SUPABASE_SECRET_KEY: localSecret,
+    NEXT_PUBLIC_SUPABASE_URL: localUrl,
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: localPublishable,
   };
 }

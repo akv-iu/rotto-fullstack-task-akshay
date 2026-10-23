@@ -1,8 +1,12 @@
 # Rotto: plain-English candidate search
 
+**Public demo on Vercel:** follow [the deployment steps](docs/DEPLOYMENT.md) for a hosted Supabase project, anonymous visitors, and daily search limits.
+
 **Run** (Docker Desktop running, Node 24): `export OPENAI_API_KEY=… STRIPE_WEBHOOK_SECRET=…`, then `make setup && make dev` → http://localhost:3000. Sign in as `recruiter@acme.test` or `recruiter@globex.test` / `rotto-assessment`. `make test` runs 208 tests (5 more cover running without keys).
 
-**How search works.** One LLM call turns the brief into filter JSON; no candidate data is sent. One fixed, parameterized SQL function returns exact matches, 20 per page: open to work first, then most experienced, then ID; paging never uses a search (p95 44–150 ms). Editing a chip re-runs without the LLM or a search. The samples are exact filter matches, so precision comes from correct filters: all 10 return exactly the right people.
+**Existing local database:** apply new migrations with `npx supabase migration up --local` before starting the updated app. This preserves existing data.
+
+**How search works.** One LLM call turns the brief into filter JSON; no candidate data is sent. One fixed, parameterized SQL function returns exact matches, 20 per page: open to work first, then most experienced, then ID; paging never uses a search. Paging combines recruiter verification and the search lookup into one database call, followed by the candidate query. Editing a chip re-runs without the LLM or a search. The samples are exact filter matches, so precision comes from correct filters: all 10 return exactly the right people.
 
 **How invented filters are prevented.** Strict structured output with the real values as enums: the model can't name a city or skill we don't have, and code re-checks every value. Exclusions have their own filters ("without a PhD", "doesn't know Java", "never at a startup"). Anything it can't map ("speaks Japanese", "experienced", linked conditions like "A in X or B in Y") becomes an amber chip and the search returns **nobody**, not the wrong people. No real conditions (vague, hostile or injection briefs) → nobody, never everyone, enforced in code and again in SQL (a filter set matching all 5,000 returns nobody).
 

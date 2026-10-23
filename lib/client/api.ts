@@ -21,6 +21,11 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
   }
   const json = await res.json().catch(() => null);
   if (res.status === 401) await supabase.auth.signOut(); // expired session: the layout guard sends them to sign-in
-  if (!res.ok) throw new ApiError(res.status, json?.error ?? 'Something went wrong. Please try again.');
+  if (!res.ok) {
+    const message = typeof json?.error === 'string' ? json.error.trim() : '';
+    // Keep our actionable server messages, but don't show a proxy/framework's raw error to the recruiter.
+    const generic = !message || /^(internal server error|bad gateway|service unavailable|gateway timeout)\.?$/i.test(message);
+    throw new ApiError(res.status, generic ? 'Something went wrong. Please try again in a moment.' : message);
+  }
   return json as T;
 }
